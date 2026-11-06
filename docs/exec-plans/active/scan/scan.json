@@ -1,0 +1,496 @@
+{
+ "generated_at": "2026-11-06T15:28:04Z",
+ "root": "/Users/likangjie/项目代码/量化数据源",
+ "summary": {
+  "files": 15,
+  "py_files": 5,
+  "py_loc": 2643,
+  "all_loc": 6917,
+  "functions": 112,
+  "dup_clusters": 2,
+  "secret_hits": 8,
+  "todos": 0
+ },
+ "inventory": [
+  {
+   "path": "README.md",
+   "ext": ".md",
+   "bytes": 5217,
+   "loc": 94
+  },
+  {
+   "path": "docs/CI.md",
+   "ext": ".md",
+   "bytes": 2979,
+   "loc": 60
+  },
+  {
+   "path": "docs/HARNESS-RULES.md",
+   "ext": ".md",
+   "bytes": 73064,
+   "loc": 1101
+  },
+  {
+   "path": "docs/exec-plans/active/harness-migration.md",
+   "ext": ".md",
+   "bytes": 14632,
+   "loc": 217
+  },
+  {
+   "path": "docs/exec-plans/tech-debt-tracker.md",
+   "ext": ".md",
+   "bytes": 11683,
+   "loc": 57
+  },
+  {
+   "path": "docs/new-project-harness-rules.md",
+   "ext": ".md",
+   "bytes": 54079,
+   "loc": 871
+  },
+  {
+   "path": "docs/turn-project-to-harness-rules.md",
+   "ext": ".md",
+   "bytes": 73064,
+   "loc": 1101
+  },
+  {
+   "path": "scripts/analysis/repro_thread_safety.py",
+   "ext": ".py",
+   "bytes": 2540,
+   "loc": 67
+  },
+  {
+   "path": "scripts/analysis/scan_project.py",
+   "ext": ".py",
+   "bytes": 12252,
+   "loc": 317
+  },
+  {
+   "path": "sql/binance_stream_schema.sql",
+   "ext": ".sql",
+   "bytes": 2729,
+   "loc": 92
+  },
+  {
+   "path": "tools/binance_pull.py",
+   "ext": ".py",
+   "bytes": 29202,
+   "loc": 632
+  },
+  {
+   "path": "tools/binance_user_stream.py",
+   "ext": ".py",
+   "bytes": 36212,
+   "loc": 834
+  },
+  {
+   "path": "tools/event_sink.py",
+   "ext": ".py",
+   "bytes": 35481,
+   "loc": 793
+  },
+  {
+   "path": "币安数据源分析报告.md",
+   "ext": ".md",
+   "bytes": 25692,
+   "loc": 418
+  },
+  {
+   "path": "用户数据流接入指南.md",
+   "ext": ".md",
+   "bytes": 13343,
+   "loc": 263
+  }
+ ],
+ "dependency_edges": [
+  {
+   "from": "scripts/analysis/repro_thread_safety.py",
+   "to": "event_sink"
+  },
+  {
+   "from": "scripts/analysis/repro_thread_safety.py",
+   "to": "binance_user_stream"
+  },
+  {
+   "from": "tools/binance_user_stream.py",
+   "to": "event_sink"
+  }
+ ],
+ "external_imports": {
+  "urllib": 6,
+  "os": 5,
+  "sys": 5,
+  "__future__": 4,
+  "argparse": 4,
+  "json": 4,
+  "datetime": 4,
+  "time": 3,
+  "psycopg": 3,
+  "tempfile": 2,
+  "concurrent": 2,
+  "hashlib": 2,
+  "csv": 2,
+  "random": 2,
+  "socket": 2,
+  "ssl": 2,
+  "traceback": 1,
+  "ast": 1,
+  "re": 1,
+  "collections": 1,
+  "base64": 1,
+  "hmac": 1,
+  "struct": 1,
+  "uuid": 1,
+  "sqlite3": 1
+ },
+ "big_functions": [
+  {
+   "name": "main",
+   "line": 150,
+   "length": 164,
+   "branches": 36,
+   "approx_cc": 37,
+   "nesting": 5,
+   "file": "scripts/analysis/scan_project.py"
+  },
+  {
+   "name": "cmd_klines",
+   "line": 317,
+   "length": 93,
+   "branches": 26,
+   "approx_cc": 27,
+   "nesting": 3,
+   "file": "tools/binance_pull.py"
+  },
+  {
+   "name": "cmd_check",
+   "line": 466,
+   "length": 80,
+   "branches": 19,
+   "approx_cc": 20,
+   "nesting": 4,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "cmd_selftest",
+   "line": 666,
+   "length": 78,
+   "branches": 21,
+   "approx_cc": 22,
+   "nesting": 5,
+   "file": "tools/event_sink.py"
+  },
+  {
+   "name": "_futures_listen",
+   "line": 663,
+   "length": 72,
+   "branches": 21,
+   "approx_cc": 22,
+   "nesting": 5,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "get",
+   "line": 160,
+   "length": 71,
+   "branches": 18,
+   "approx_cc": 19,
+   "nesting": 4,
+   "file": "tools/binance_pull.py"
+  },
+  {
+   "name": "cmd_selftest",
+   "line": 391,
+   "length": 70,
+   "branches": 12,
+   "approx_cc": 13,
+   "nesting": 3,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "normalize",
+   "line": 90,
+   "length": 66,
+   "branches": 23,
+   "approx_cc": 24,
+   "nesting": 6,
+   "file": "tools/event_sink.py"
+  },
+  {
+   "name": "write",
+   "line": 364,
+   "length": 62,
+   "branches": 8,
+   "approx_cc": 9,
+   "nesting": 1,
+   "file": "tools/event_sink.py"
+  },
+  {
+   "name": "cmd_snapshot",
+   "line": 551,
+   "length": 61,
+   "branches": 8,
+   "approx_cc": 9,
+   "nesting": 2,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "on_event",
+   "line": 447,
+   "length": 54,
+   "branches": 18,
+   "approx_cc": 19,
+   "nesting": 5,
+   "file": "tools/event_sink.py"
+  },
+  {
+   "name": "__init__",
+   "line": 164,
+   "length": 49,
+   "branches": 10,
+   "approx_cc": 11,
+   "nesting": 2,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "build_parser",
+   "line": 551,
+   "length": 48,
+   "branches": 2,
+   "approx_cc": 3,
+   "nesting": 2,
+   "file": "tools/binance_pull.py"
+  },
+  {
+   "name": "cmd_listen",
+   "line": 737,
+   "length": 47,
+   "branches": 11,
+   "approx_cc": 12,
+   "nesting": 6,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "scan_python",
+   "line": 64,
+   "length": 46,
+   "branches": 13,
+   "approx_cc": 14,
+   "nesting": 2,
+   "file": "scripts/analysis/scan_project.py"
+  }
+ ],
+ "hot_cc": [
+  {
+   "name": "main",
+   "line": 150,
+   "length": 164,
+   "branches": 36,
+   "approx_cc": 37,
+   "nesting": 5,
+   "file": "scripts/analysis/scan_project.py"
+  },
+  {
+   "name": "cmd_klines",
+   "line": 317,
+   "length": 93,
+   "branches": 26,
+   "approx_cc": 27,
+   "nesting": 3,
+   "file": "tools/binance_pull.py"
+  },
+  {
+   "name": "normalize",
+   "line": 90,
+   "length": 66,
+   "branches": 23,
+   "approx_cc": 24,
+   "nesting": 6,
+   "file": "tools/event_sink.py"
+  },
+  {
+   "name": "_futures_listen",
+   "line": 663,
+   "length": 72,
+   "branches": 21,
+   "approx_cc": 22,
+   "nesting": 5,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "cmd_selftest",
+   "line": 666,
+   "length": 78,
+   "branches": 21,
+   "approx_cc": 22,
+   "nesting": 5,
+   "file": "tools/event_sink.py"
+  },
+  {
+   "name": "cmd_check",
+   "line": 466,
+   "length": 80,
+   "branches": 19,
+   "approx_cc": 20,
+   "nesting": 4,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "get",
+   "line": 160,
+   "length": 71,
+   "branches": 18,
+   "approx_cc": 19,
+   "nesting": 4,
+   "file": "tools/binance_pull.py"
+  },
+  {
+   "name": "on_event",
+   "line": 447,
+   "length": 54,
+   "branches": 18,
+   "approx_cc": 19,
+   "nesting": 5,
+   "file": "tools/event_sink.py"
+  },
+  {
+   "name": "cmd_symbols",
+   "line": 488,
+   "length": 41,
+   "branches": 14,
+   "approx_cc": 15,
+   "nesting": 3,
+   "file": "tools/binance_pull.py"
+  },
+  {
+   "name": "scan_python",
+   "line": 64,
+   "length": 46,
+   "branches": 13,
+   "approx_cc": 14,
+   "nesting": 2,
+   "file": "scripts/analysis/scan_project.py"
+  },
+  {
+   "name": "_spot_listen",
+   "line": 617,
+   "length": 44,
+   "branches": 13,
+   "approx_cc": 14,
+   "nesting": 7,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "cmd_selftest",
+   "line": 391,
+   "length": 70,
+   "branches": 12,
+   "approx_cc": 13,
+   "nesting": 3,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "http_json",
+   "line": 117,
+   "length": 41,
+   "branches": 11,
+   "approx_cc": 12,
+   "nesting": 4,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "cmd_listen",
+   "line": 737,
+   "length": 47,
+   "branches": 11,
+   "approx_cc": 12,
+   "nesting": 6,
+   "file": "tools/binance_user_stream.py"
+  },
+  {
+   "name": "recv",
+   "line": 243,
+   "length": 37,
+   "branches": 11,
+   "approx_cc": 12,
+   "nesting": 3,
+   "file": "tools/binance_user_stream.py"
+  }
+ ],
+ "duplication": [
+  {
+   "hash": "ace72accce7ba983",
+   "files": [
+    "/Users/likangjie/项目代码/量化数据源/tools/binance_user_stream.py",
+    "/Users/likangjie/项目代码/量化数据源/tools/event_sink.py"
+   ],
+   "locations": [
+    "/Users/likangjie/项目代码/量化数据源/tools/binance_user_stream.py:332",
+    "/Users/likangjie/项目代码/量化数据源/tools/event_sink.py:581"
+   ]
+  },
+  {
+   "hash": "cd37aa97a43c0e7d",
+   "files": [
+    "/Users/likangjie/项目代码/量化数据源/tools/binance_user_stream.py",
+    "/Users/likangjie/项目代码/量化数据源/tools/event_sink.py"
+   ],
+   "locations": [
+    "/Users/likangjie/项目代码/量化数据源/tools/binance_user_stream.py:333",
+    "/Users/likangjie/项目代码/量化数据源/tools/event_sink.py:582"
+   ]
+  }
+ ],
+ "secrets": [
+  {
+   "file": "README.md",
+   "line": 70,
+   "kind": "pg_url_with_password",
+   "snippet": "postgresql://user:***@"
+  },
+  {
+   "file": "docs/exec-plans/tech-debt-tracker.md",
+   "line": 23,
+   "kind": "pg_url_with_password",
+   "snippet": "postgresql://user:***@"
+  },
+  {
+   "file": "docs/exec-plans/tech-debt-tracker.md",
+   "line": 31,
+   "kind": "pg_url_with_password",
+   "snippet": "postgresql://user:***@"
+  },
+  {
+   "file": "tools/binance_user_stream.py",
+   "line": 818,
+   "kind": "pg_url_with_password",
+   "snippet": "postgresql://user:***@"
+  },
+  {
+   "file": "tools/event_sink.py",
+   "line": 12,
+   "kind": "pg_url_with_password",
+   "snippet": "postgresql://user:***@"
+  },
+  {
+   "file": "tools/event_sink.py",
+   "line": 26,
+   "kind": "pg_url_with_password",
+   "snippet": "postgresql://postgres:***@"
+  },
+  {
+   "file": "用户数据流接入指南.md",
+   "line": 141,
+   "kind": "pg_url_with_password",
+   "snippet": "postgresql://user:***@"
+  },
+  {
+   "file": "用户数据流接入指南.md",
+   "line": 259,
+   "kind": "pg_url_with_password",
+   "snippet": "postgresql://user:***@"
+  }
+ ],
+ "todos": []
+}
