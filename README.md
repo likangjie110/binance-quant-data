@@ -53,7 +53,7 @@ python3 -m venv .venv && .venv/bin/pip install "psycopg[binary]"
 ## 环境与自检
 
 - Python ≥ 3.10；核心只依赖标准库。
-- 文档/结构门禁：`python3 scripts/docs/check_docs.py`（CI：`.github/workflows/docs.yml`）。
+- 一键门禁：`bash scripts/gates/check.sh`（CI：`.github/workflows/ci.yml`；文档作业：`docs.yml`）。
 - 已知缺陷复现：`python3 scripts/analysis/repro_thread_safety.py`（修复后应退出码 1）。
 - 只读扫描：`python3 scripts/analysis/scan_project.py --out /tmp/scan`。
 
@@ -66,7 +66,6 @@ python3 -m venv .venv && .venv/bin/pip install "psycopg[binary]"
 ## 提交前
 
 ```bash
-python3 -m compileall -q tools scripts
-python3 scripts/docs/check_docs.py
-git status --short   # 不应出现 work/、.env、*key*.txt
+bash scripts/gates/check.sh   # compileall + ruff + pytest + 文档 + 生成物 + 密钥
+git status --short            # 不应出现 work/、.env、*key*.txt
 ```

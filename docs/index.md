@@ -34,7 +34,7 @@
 | 文档 | 说明 | 校验状态 |
 |---|---|---|
 | [exec-plans/active/harness-migration.md](exec-plans/active/harness-migration.md) | 进行中的改造计划（状态、批次、决策、日志） | 已校验 2026-11-06 |
-| [exec-plans/tech-debt-tracker.md](exec-plans/tech-debt-tracker.md) | 技术债台账（19 项，含 P0 复现证据） | 已校验 2026-11-06 |
+| [exec-plans/tech-debt-tracker.md](exec-plans/tech-debt-tracker.md) | 技术债台账（21 项，含 P0 复现证据） | 已校验 2026-11-06 |
 | [exec-plans/completed/README.md](exec-plans/completed/README.md) | 已完成计划归档规则（当前为空） | 已校验 2026-11-06 |
 | [exec-plans/active/scan/scan-report.md](exec-plans/active/scan/scan-report.md) | **阶段 1 扫描快照**（历史证据，非当前状态） | 自动生成于 `474e382`（`scripts/analysis/scan_project.py`） |
 | [exec-plans/active/scan/scan.json](exec-plans/active/scan/scan.json) | 扫描原始数据（机器可读） | 自动生成 |

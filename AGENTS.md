@@ -46,8 +46,11 @@ python3 tools/event_sink.py selftest --out work/signals/selftest
 python3 -m venv .venv && .venv/bin/pip install "psycopg[binary]"
 .venv/bin/python tools/event_sink.py selftest --out work/signals/selftest --pg-dsn "$BINANCE_PG_DSN"
 
-# 质量与自检
+# 质量门禁（一键；CI 跑同一脚本）
+bash scripts/gates/check.sh
+# 单项
 python3 -m compileall -q tools scripts
+.venv/bin/python -m pytest -q
 python3 scripts/docs/check_docs.py                  # 文档链接/结构/新鲜度检查
 python3 scripts/analysis/scan_project.py --out docs/exec-plans/active/scan
 python3 scripts/analysis/repro_thread_safety.py     # 已知 P0 复现（修复后应退出码 1）

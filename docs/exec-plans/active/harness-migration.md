@@ -5,7 +5,7 @@
 - 项目 / 仓库：`量化数据源`（`/Users/likangjie/项目代码/量化数据源`）
 - 分支：`harnessing`（基线在 `main`，提交 `07cae02`）
 - 计划版本 / 日期：v1 / 2026-11-06
-- 状态：**执行中**（阶段 1 已确认；阶段 2 文档对齐已完成，待提交）
+- 状态：**执行中**（阶段 1 已确认；阶段 2 文档对齐、阶段 3 门禁已完成，待阶段 4）
 - 规则来源：`docs/HARNESS-RULES.md`（与 `~/references/harness-go` 哈希一致：`5d6820b1…`）
 
 ## 1. 项目概况
@@ -40,10 +40,12 @@
 
 入口点共 3 个（`tools/*.py` 的 `main()`）；无库入口、无 `__init__.py`、无包结构。
 
-### 1.3 当前测试与 CI 现状
+### 1.3 当前测试与 CI 现状（阶段 3 后）
 
-- 测试：**无** `tests/`、无 pytest 配置；仅有 `selftest` 子命令（`binance_user_stream.py:391`、`event_sink.py:666`）与 `repro_thread_safety.py`，需手工运行。
-- CI：**无** `.github/workflows/`、无 pre-commit、无 lint 配置（详见 `docs/CI.md`）。
+- 测试：`tests/` 已建立（20 个用例：签名官方向量、事件归一化、sink 幂等、信号状态机、CLI 冒烟、P0 回归 xfail）。
+- 门禁：`bash scripts/gates/check.sh` 一键跑 6 步（compileall → ruff 基线 → pytest → 文档 → 生成物 → 密钥）；
+  `ruff` 采用迁移基线（5 条存量违规，只拦新增）。
+- CI：GitHub Actions 两个作业——`docs.yml`（文档）与 `ci.yml`（质量门禁），公开仓库免费额度下已跑通。
 - 代码度量（阶段 1 扫描快照 `docs/exec-plans/active/scan/scan-report.md`）：受版本控制文件 12 个，Python 2,643 行 / 5 个 `.py`，112 个函数；跨文件重复窗口 2 组。
 
 ## 2. 框架判定与 CI 现状（见 §3.2）
@@ -139,7 +141,7 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 - [x] 五个阶段全部拆解完成，每个子任务都有负责人角色、产出物路径、可机械检查的验收标准
 - [x] 框架判定已完成，命中证据（文件路径）写入 `docs/CI.md`
 - [x] 问题清单每条含 ID、位置、类别、严重度、证据、修复建议、业务行为影响
-- [x] 标注了“bug 修复”与“业务变更”两类（本清单 19 项中 3 项为 bug 修复，0 项业务变更）
+- [x] 标注了“bug 修复”与“业务变更”两类（本清单 21 项中 4 项为 bug 修复，0 项业务变更）
 - [x] 每批改造有独立回滚方案
 - [x] 计划文档无“只有标题、没有分析”的条目
 - [x] 未修改任何业务代码（`git diff --stat` 自证）
@@ -171,7 +173,7 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 - [x] `QUALITY_SCORE.md` 给出业务域/架构层分数与可复算依据
 - [x] 文档校验在死链/缺索引/生成物漂移时失败（负向测试：坏链接退出码 1）
 
-### 阶段 3 · 门禁审计与自动化质量校验
+### 阶段 3 · 门禁审计与自动化质量校验（**已完成，2026-11-07**）
 
 - 前置：阶段 2 通过。
 - 子任务：
@@ -183,7 +185,25 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
   | pre-commit / CI | 质量工程师 | `.pre-commit-config.yaml` 或 `.github/workflows/`（D1 决策） | 在干净 clone 上可复现 |
   | 依赖锁定 | 质量工程师 | `requirements*.txt` / uv lock（D5） | 锁定安装后 selftest 通过 |
   | §3.3 Tauri 三问 | — | 不适用 | 已在 `docs/CI.md` 标注 |
-- 验收：所有门禁可从 README 一条命令运行；失败时给出可操作错误；CI（若启用）在 PR 上真实拦截。
+- 产出（已落地）：
+  - `scripts/gates/check.sh`（六步门禁，本地与 CI 同一脚本）
+  - `scripts/gates/ruff_gate.py` + `scripts/gates/ruff_baseline.txt`（迁移基线：5 条存量，禁新增）
+  - `tests/`（20 用例；P0 回归以 `xfail(strict)` 记录，修复后自动失败以提醒转正）
+  - `.secretsignore` + `scan_project.py --check-secrets`（10 处命中全部为占位符/白名单，0 剩余）
+  - `requirements-dev.txt`（pytest/ruff 锁定）、`requirements-pg.txt`（psycopg 锁定）
+  - `.github/workflows/ci.yml`（GitHub Actions 质量门禁）
+- 验收：`bash scripts/gates/check.sh` 一条命令全过；负向测试通过（死链/假密钥/新增 lint 均能拦）；
+  GitHub Actions `ci` 与 `docs` 两个作业在 `harnessing` 上绿灯。
+
+**阶段 3 验收勾选**：
+
+- [x] 语法/导入门禁：故意植入语法错误时退出非 0（compileall）
+- [x] 单测门禁：`pytest -q` 20 用例通过（18 passed + 2 xfailed 记录 P0/签名缺陷）
+- [x] 密钥扫描门禁：植入假 AWS key 退出 1；文档占位符 0 误报
+- [x] CI：GitHub Actions `ci.yml` + `docs.yml` 已运行（公开仓库免费额度）
+- [x] 依赖锁定：`requirements-dev.txt` / `requirements-pg.txt` 固定版本
+- [x] ruff 引入（D5）：仅 lint，基线机制避免一次性改业务代码
+- [x] §3.3 Tauri 三问：不适用（非 Tauri），已在 `docs/CI.md` 标注
 
 ### 阶段 4 · 问题修复与重构
 
@@ -212,7 +232,7 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 | D2 | 是否包化（`pyproject.toml` + `binance_tools/` 包 + `python -m` 入口）？ | **已决策：包化**；`tools/*.py` 保留薄壳兼容 | 批次 2 |
 | D3 | `work/`（逆向证据约 1GB，含 App 配置 AK/SK、Cookie 副本）如何保留？ | **已决策：本地正常保留、不入库**（ADR-007）；README/参考索引说明再生成方式 | 批次 4、TD-DOC-002 |
 | D4 | 默认落库目标是 SQLite 还是 PostgreSQL（或双写）？ | **已决策：双写**（ADR-004）；默认 `jsonl,csv,sqlite`，生产追加 `pg` | 批次 1/5、TD-PERF-001 |
-| D5 | 是否引入 ruff/mypy 及严格度？ | 待决策（阶段 3 前） | 阶段 3、批次 3 |
+| D5 | 是否引入 ruff/mypy 及严格度？ | **已决策：引入 ruff（仅 lint、不格式化）；暂不引入 mypy**（ADR-006 关联） | 阶段 3、批次 3 |
 | D6 | 三个脚本是否合并为单一 CLI（`binance-tools klines|listen|snapshot`）？ | 待决策（建议随 D2 一并定） | 批次 2、TD-ARCH-003 |
 
 ## 7. 进度与决策日志
@@ -223,6 +243,8 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 | 2026-11-06 | 阶段 1 | 只读扫描 + P0 复现 + 三份文档 | 待提交（`harnessing`） | 扫描器/复现脚本入库；计划与问题清单待人工确认 |
 | 2026-11-06 | 阶段 1 | 业务代码零改动自证 | — | `git diff --stat -- tools/ sql/` 为空；本阶段新增仅 `docs/`、`scripts/analysis/`、`.gitignore` 调整 |
 | 2026-11-06 | 决策 | D1–D4 用户拍板（ADR-004/005/006/007） | — | CI=GitHub Actions；包化；work/ 本地保留；落库双写 |
+| 2026-11-07 | 决策 | D5：引入 ruff（仅 lint，不上 mypy） | — | 用户拍板；采用迁移基线，不改业务代码 |
+| 2026-11-07 | 阶段 3 | 门禁体系落地：gate 脚本 + pytest + ruff 基线 + 密钥门禁 + 依赖锁定 + CI | 待提交 | 本地 `check.sh` 全绿；GitHub Actions 两个作业已验证 |
 | 2026-11-06 | 阶段 2 | 文档对齐完成：AGENTS/ARCHITECTURE/索引/信念/ADR/规格/质量/可靠/安全/开发/排障/生成物 + 校验器 + CI 作业 | 待提交 | `check_docs.py` 通过；重复规则文档收敛；README 重写并说明 work/ 本地策略 |
 
 ### 附：阶段 1 执行时的工作区自证

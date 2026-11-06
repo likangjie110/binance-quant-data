@@ -77,3 +77,16 @@
   推进；每批独立提交与回滚方案。
 - **后果**：阶段 4 前业务代码零改动；批次 1 是唯一改变运行时行为的批次（bug 修复）。
 - **证据**：`docs/exec-plans/active/harness-migration.md` §4；`git log --oneline`。
+
+## ADR-009 质量门禁：ruff 迁移基线 + 六步一键 gate
+
+- **日期**：2026-11-07；决策人：用户（D5）
+- **背景**：阶段 3 需要引入静态检查，但按改造纪律，阶段 4 之前不允许改业务代码；存量有 5 条 ruff 违规
+  （2×F401、2×F821 过期注解、1×F841 死变量），若直接 `ruff check` 会迫使在阶段 3 改业务代码。
+- **决策**：引入 `ruff`（仅 lint，不做格式化；**不引入 mypy**）。采用**迁移基线**：
+  `scripts/gates/ruff_baseline.txt` 记录允许的存量违规条数，`ruff_gate.py` 只拦"新增"；
+  存量清零后删除基线行。门禁整合为 `scripts/gates/check.sh` 六步，本地与 CI 同一脚本。
+- **后果**：CI 可以立刻变绿而不动业务代码；基线成为"可见的技术债"（TD-LINT-001），批次 1/2 必须清零；
+  新增违规会在任何提交上立即失败。
+- **证据**：`scripts/gates/{check.sh,ruff_gate.py,ruff_baseline.txt}`；`.github/workflows/ci.yml`；
+  `docs/QUALITY_SCORE.md` 的 ruff 基线指标。

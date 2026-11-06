@@ -38,11 +38,13 @@ python3 tools/event_sink.py selftest --out work/signals/selftest
 
 | 阶段 | 测试方式 |
 |---|---|
-| 当前（阶段 2） | `python3 -m compileall -q tools scripts` + 各脚本 `selftest` + `scripts/docs/check_docs.py` |
-| 阶段 3 起 | `pytest -q`（签名向量、归一化、sink 幂等、信号状态机、并发回归）+ 密钥扫描 + CI |
+| 一键门禁 | `bash scripts/gates/check.sh`（compileall → ruff 基线 → pytest → 文档 → 生成物 → 密钥） |
+| 单测 | `.venv/bin/python -m pytest -q`（20 用例：签名官方向量、归一化、sink 幂等、信号状态机、CLI 冒烟、P0 xfail） |
+| lint | `.venv/bin/ruff check tools scripts tests`；门禁走 `scripts/gates/ruff_gate.py`（迁移基线只拦新增） |
 | P0 回归 | `python3 scripts/analysis/repro_thread_safety.py`：修复前退出码 0（复现），修复后 1（不再复现） |
 
-CI：`.github/workflows/docs.yml`（文档校验）；阶段 3 增加 `ci.yml`（编译/测试/扫描）。
+CI（GitHub Actions）：`.github/workflows/ci.yml`（质量门禁）+ `docs.yml`（文档）。公开仓库免费额度。
+依赖：`requirements-dev.txt`（pytest/ruff）、`requirements-pg.txt`（psycopg）。
 
 ## 4. 调试
 

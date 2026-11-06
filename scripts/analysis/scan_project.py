@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import fnmatch
 import hashlib
 import json
 import os
@@ -25,7 +26,7 @@ import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
-SKIP_DIRS = {".git", ".venv", "work", "__pycache__", "node_modules", ".idea", "scan"}
+SKIP_DIRS = {".git", ".venv", "work", "__pycache__", "node_modules", ".idea", "scan", ".pytest_cache", ".ruff_cache"}
 SCAN_EXTS = {".py", ".sql", ".md", ".sh", ".toml", ".yaml", ".yml", ".json", ".txt"}
 
 BRANCH_NODES = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try,
@@ -147,10 +148,41 @@ SECRET_PATTERNS = [
 ]
 
 
+
+def load_secret_ignore(path: str | None = None):
+    """读取 .secretsignore：每行 kind|path-glob|reason。"""
+    path = path or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__)))), ".secretsignore")
+    rules = []
+    if not os.path.exists(path):
+        return rules
+    for line in open(path, "r", encoding="utf-8"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [x.strip() for x in line.split("|")]
+        if len(parts) != 3:
+            raise SystemExit(f".secretsignore 格式错误：{line!r}（应为 kind|glob|reason）")
+        rules.append(tuple(parts))
+    return rules
+
+
+def secret_ignore_reason(hit: dict, rules) -> str | None:
+    """返回忽略原因；None 表示真实命中。"""
+    if "***" in hit.get("snippet", ""):
+        return "已脱敏的占位符（snippet 含 ***）"
+    for kind, glob, reason in rules:
+        if kind in ("*", hit["kind"]) and fnmatch.fnmatch(hit["file"], glob):
+            return reason
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=".")
     ap.add_argument("--out", default="docs/exec-plans/active/scan")
+    ap.add_argument("--check-secrets", action="store_true",
+                    help="只做密钥门禁：有未忽略命中则退出码 1")
     args = ap.parse_args()
     root = os.path.abspath(args.root)
     os.makedirs(args.out, exist_ok=True)
@@ -194,6 +226,19 @@ def main() -> int:
                         snippet = re.sub(r"://([^:]+):([^@]+)@", r"://\1:***@", snippet)
                     secret_hits.append({"file": r, "line": line, "kind": name,
                                         "snippet": snippet[:120]})
+
+    if args.check_secrets:
+        rules = load_secret_ignore()
+        ignored, remaining = [], []
+        for h in secret_hits:
+            reason = secret_ignore_reason(h, rules)
+            (ignored if reason else remaining).append((h, reason))
+        print(f"密钥检查：命中 {len(secret_hits)}，忽略 {len(ignored)}（占位符/白名单），剩余 {len(remaining)}")
+        for h, _ in ignored:
+            print(f"  [忽略] {h['file']}:{h['line']} [{h['kind']}]")
+        for h, _ in remaining:
+            print(f"  [失败] {h['file']}:{h['line']} [{h['kind']}] {h['snippet']}")
+        return 0 if not remaining else 1
 
     # 重复窗口聚类
     by_hash = defaultdict(list)

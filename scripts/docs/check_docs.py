@@ -25,7 +25,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SKIP_DIRS = {".git", ".venv", "work", "__pycache__", "node_modules", ".idea", "scan"}
+SKIP_DIRS = {".git", ".venv", "work", "__pycache__", "node_modules", ".idea", "scan", ".pytest_cache", ".ruff_cache"}
 LINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 FENCE_RE = re.compile(r"```.*?```", re.S)
 PLACEHOLDER_RE = re.compile(r"待补充|待填写|TBD")
