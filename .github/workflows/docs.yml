@@ -1,0 +1,44 @@
+name: docs
+
+on:
+  push:
+    branches: [main, harnessing]
+    paths:
+      - "AGENTS.md"
+      - "ARCHITECTURE.md"
+      - "README.md"
+      - "docs/**"
+      - "scripts/docs/**"
+      - "sql/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "AGENTS.md"
+      - "ARCHITECTURE.md"
+      - "README.md"
+      - "docs/**"
+      - "scripts/docs/**"
+      - "sql/**"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    name: 文档校验
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 文档结构/链接/占位符校验
+        run: python3 scripts/docs/check_docs.py
+
+      - name: 数据库文档与 sql/ 一致性
+        run: python3 scripts/docs/gen_db_schema.py --check

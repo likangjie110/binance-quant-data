@@ -5,7 +5,7 @@
 - 项目 / 仓库：`量化数据源`（`/Users/likangjie/项目代码/量化数据源`）
 - 分支：`harnessing`（基线在 `main`，提交 `07cae02`）
 - 计划版本 / 日期：v1 / 2026-11-06
-- 状态：**待确认**（阶段 1 已完成，等待人工确认后进入阶段 2）
+- 状态：**执行中**（阶段 1 已确认；阶段 2 文档对齐已完成，待提交）
 - 规则来源：`docs/HARNESS-RULES.md`（与 `~/references/harness-go` 哈希一致：`5d6820b1…`）
 
 ## 1. 项目概况
@@ -44,7 +44,7 @@
 
 - 测试：**无** `tests/`、无 pytest 配置；仅有 `selftest` 子命令（`binance_user_stream.py:391`、`event_sink.py:666`）与 `repro_thread_safety.py`，需手工运行。
 - CI：**无** `.github/workflows/`、无 pre-commit、无 lint 配置（详见 `docs/CI.md`）。
-- 代码度量（`docs/exec-plans/active/scan/scan-report.md`）：受版本控制文件 12 个，Python 2,643 行 / 5 个 `.py`，112 个函数；跨文件重复窗口 2 组。
+- 代码度量（阶段 1 扫描快照 `docs/exec-plans/active/scan/scan-report.md`）：受版本控制文件 12 个，Python 2,643 行 / 5 个 `.py`，112 个函数；跨文件重复窗口 2 组。
 
 ## 2. 框架判定与 CI 现状（见 §3.2）
 
@@ -128,7 +128,7 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 | 子任务 | 负责人角色 | 产出物 | 机械验收 |
 |---|---|---|---|
 | 仓库地图 / 框架判定 | 架构审计者 | 本文件 §1–§2、`docs/CI.md` | 文件路径存在；判定证据逐条可查 |
-| 架构/复杂度/重复扫描 | 架构审计者 | `docs/exec-plans/active/scan/scan-report.md`、`scan.json` | `python3 scripts/analysis/scan_project.py` 可复跑，summary 计数与提交版一致（`generated_at` 除外） |
+| 架构/复杂度/重复扫描 | 架构审计者 | `docs/exec-plans/active/scan/scan-report.md`、`scan.json` | `python3 scripts/analysis/scan_project.py` 在阶段 1 提交 `474e382` 上可复跑，summary 计数与提交版一致（`generated_at` 除外） |
 | 缺陷复现 | 质量工程师 | `scripts/analysis/repro_thread_safety.py` + 本清单 P0 记录 | 脚本退出码 0（复现成功） |
 | 问题清单 | 质量工程师 | `docs/exec-plans/tech-debt-tracker.md` | 每条含 11 字段；P0/P1 均有 file:line 证据 |
 | 批次与回滚方案 | 架构审计者 | 本文件 §4 | 每批有独立回滚方案 |
@@ -144,9 +144,13 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 - [x] 计划文档无“只有标题、没有分析”的条目
 - [x] 未修改任何业务代码（`git diff --stat` 自证）
 
-### 阶段 2 · 文档对齐（待阶段 1 确认后启动）
+### 阶段 2 · 文档对齐（**已完成，2026-11-06**）
 
-- 前置：阶段 1 计划已确认。
+- 前置：阶段 1 计划已确认（D1–D4 已由用户决策）。
+- 产出：`AGENTS.md`、`ARCHITECTURE.md`、`docs/index.md`、`docs/design-docs/{index,core-beliefs,decisions}.md`、
+  `docs/product-specs/index.md`、`docs/references/index.md`、`docs/QUALITY_SCORE.md`、`docs/RELIABILITY.md`、
+  `docs/SECURITY.md`、`docs/DEVELOPMENT.md`、`docs/TROUBLESHOOTING.md`、`docs/generated/db-schema.md`、
+  `docs/exec-plans/completed/README.md`、`scripts/docs/{check_docs,gen_db_schema}.py`、`.github/workflows/docs.yml`。
 - 子任务与产出：
   | 子任务 | 负责人角色 | 产出物 | 机械验收 |
   |---|---|---|---|
@@ -155,7 +159,17 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
   | 价值契约 | 项目负责人 | `core-beliefs.md`（附录 F） | 每条可追溯到一次决策或缺陷 |
   | 文档索引与 README 重写 | 文档负责人 | `README.md`、`docs/README.md` | 失效路径 0；`work/` 获取方式写清 |
   | exec-plans 结构 | 质量工程师 | `docs/exec-plans/{active,completed}/`、本计划与 tracker 就位 | 目录存在且链接可达 |
-- 验收：文档中的命令全部可执行；引用路径全部存在；`markdownlint`（如引入）通过。
+- 验收：`python3 scripts/docs/check_docs.py` 通过（22 个文档、24 条链接、索引完整、生成物一致）；
+  AGENTS.md 行数与必需小节满足规则；doc check CI 作业已落 `.github/workflows/docs.yml`。
+
+**阶段 2 验收勾选**：
+
+- [x] `AGENTS.md` ≤ 200 行、含必需小节（地图形态，不写教程）
+- [x] `ARCHITECTURE.md` 依赖方向规则与代码抽样 4 处一致
+- [x] `docs/index.md` 链接全部可解析（检查器实测 24 条）
+- [x] 旧文档逐条比对：README 重写、重复规则文档收敛为 `docs/HARNESS-RULES.md` 单份
+- [x] `QUALITY_SCORE.md` 给出业务域/架构层分数与可复算依据
+- [x] 文档校验在死链/缺索引/生成物漂移时失败（负向测试：坏链接退出码 1）
 
 ### 阶段 3 · 门禁审计与自动化质量校验
 
@@ -194,12 +208,12 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 
 | 编号 | 问题 | 为什么需要人判断 | 影响范围 |
 |---|---|---|---|
-| D1 | 是否建立 CI，用 GitHub Actions 还是仅本地 pre-commit？ | 仓库目前无远端/无 GitHub 配置，选平台属产品与运维决策 | 阶段 3、批次 3 |
-| D2 | 是否包化（`pyproject.toml` + `binance_tools/` 包 + `python -m` 入口）？ | 会改变目录结构与调用方式，影响外部使用习惯 | 批次 2 |
-| D3 | `work/`（逆向证据约 1GB，含 App 配置 AK/SK、Cookie 副本）如何保留？ | 涉及敏感数据与存储成本，不能由代码推断 | 批次 4、TD-DOC-002 |
-| D4 | 默认落库目标是 SQLite 还是 PostgreSQL（或双写）？ | 取决于实际量化链路与部署方式 | 批次 1/5、TD-PERF-001 |
-| D5 | 是否引入 ruff/mypy 及严格度？ | 影响开发节奏与改动量 | 阶段 3、批次 3 |
-| D6 | 三个脚本是否合并为单一 CLI（`binance-tools klines|listen|snapshot`）？ | 影响用户体验与迁移成本 | 批次 2、TD-ARCH-003 |
+| D1 | 是否建立 CI，用 GitHub Actions 还是仅本地 pre-commit？ | **已决策（2026-11-06）：GitHub Actions**；阶段 2 先落文档作业，阶段 3 扩展完整门禁 | 阶段 3、批次 3 |
+| D2 | 是否包化（`pyproject.toml` + `binance_tools/` 包 + `python -m` 入口）？ | **已决策：包化**；`tools/*.py` 保留薄壳兼容 | 批次 2 |
+| D3 | `work/`（逆向证据约 1GB，含 App 配置 AK/SK、Cookie 副本）如何保留？ | **已决策：本地正常保留、不入库**（ADR-007）；README/参考索引说明再生成方式 | 批次 4、TD-DOC-002 |
+| D4 | 默认落库目标是 SQLite 还是 PostgreSQL（或双写）？ | **已决策：双写**（ADR-004）；默认 `jsonl,csv,sqlite`，生产追加 `pg` | 批次 1/5、TD-PERF-001 |
+| D5 | 是否引入 ruff/mypy 及严格度？ | 待决策（阶段 3 前） | 阶段 3、批次 3 |
+| D6 | 三个脚本是否合并为单一 CLI（`binance-tools klines|listen|snapshot`）？ | 待决策（建议随 D2 一并定） | 批次 2、TD-ARCH-003 |
 
 ## 7. 进度与决策日志
 
@@ -208,6 +222,8 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 | 2026-11-06 | 基线 | `git init` + 基线提交（11 文件，6,216 行） | `07cae02`（main） | 为阶段 1 的“零业务改动”自证建立版本基线；`.gitignore` 排除 `.venv/`、`work/`、私有目录 |
 | 2026-11-06 | 阶段 1 | 只读扫描 + P0 复现 + 三份文档 | 待提交（`harnessing`） | 扫描器/复现脚本入库；计划与问题清单待人工确认 |
 | 2026-11-06 | 阶段 1 | 业务代码零改动自证 | — | `git diff --stat -- tools/ sql/` 为空；本阶段新增仅 `docs/`、`scripts/analysis/`、`.gitignore` 调整 |
+| 2026-11-06 | 决策 | D1–D4 用户拍板（ADR-004/005/006/007） | — | CI=GitHub Actions；包化；work/ 本地保留；落库双写 |
+| 2026-11-06 | 阶段 2 | 文档对齐完成：AGENTS/ARCHITECTURE/索引/信念/ADR/规格/质量/可靠/安全/开发/排障/生成物 + 校验器 + CI 作业 | 待提交 | `check_docs.py` 通过；重复规则文档收敛；README 重写并说明 work/ 本地策略 |
 
 ### 附：阶段 1 执行时的工作区自证
 
