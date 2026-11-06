@@ -1,0 +1,17 @@
+# 依赖 / 本地环境
+.venv/
+__pycache__/
+*.pyc
+
+# 私有数据与密钥，切勿提交
+work/private/
+work/session/
+work/signals/
+*key*.txt
+.env
+
+# 逆向产物与证据（体积大、含机器相关数据）
+work/
+
+# 系统文件
+.DS_Store
