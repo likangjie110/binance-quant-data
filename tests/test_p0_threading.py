@@ -1,26 +1,24 @@
-"""P0 回归占位：多市场监听共享 DB 连接（TD-RUNTIME-001）。
+"""P0 回归：多市场监听共享 DB 连接（TD-RUNTIME-001，批次 1 已修复）。
 
-当前缺陷未修（批次 1 修复），测试以 xfail(strict=True) 记录：
-  - 现在：测试失败 → xfail，CI 通过；
-  - 批次 1 修复后：测试应通过 → XPASS(strict) 会让 CI 失败，提醒把标记转正。
+修复方式：监听线程只入队，单写线程独占 sink 连接与信号状态。
+本测试并发写入 6 条事件，要求 0 异常、0 写入失败、落库条数正确。
 """
 import sqlite3
 import threading
 
-import pytest
-
-import binance_user_stream as bus
 import event_sink as es
+import binance_user_stream as bus
 
-pytestmark = pytest.mark.p0
 
-
-@pytest.mark.xfail(strict=True, reason="TD-RUNTIME-001：跨线程共享 SQLite 连接，批次 1 修复后删除本标记")
 def test_multi_market_concurrent_write(tmp_path):
     db = tmp_path / "binance_stream.db"
-    sinks = es.build_sinks("sqlite", str(tmp_path), str(db), None, want_signals=False, quiet=True)
-    writer = bus.StreamWriter(sinks, quiet=True)
-    writer.start()  # 连接在主线程创建
+
+    def factory():
+        return es.build_sinks("sqlite", str(tmp_path), str(db),
+                              None, want_signals=False, quiet=True)
+
+    writer = bus.StreamWriter(factory, quiet=True)
+    writer.start()
 
     errors = []
 
@@ -40,10 +38,30 @@ def test_multi_market_concurrent_write(tmp_path):
         t.join()
     writer.close()
 
-    assert errors == [], f"并发写入抛错：{errors[:2]}"
+    assert errors == []
+    assert writer.sink_errors == 0
+    assert writer.count == 6
     db_conn = sqlite3.connect(db)
     try:
         rows = db_conn.execute("select count(*) from stream_events").fetchone()[0]
     finally:
         db_conn.close()
-    assert rows == 6  # 3 条现货 executionReport + 3 条合约 ORDER_TRADE_UPDATE
+    assert rows == 6
+
+
+def test_close_drains_queue(tmp_path):
+    db = tmp_path / "drain.db"
+
+    def factory():
+        return es.build_sinks("sqlite", str(tmp_path), str(db),
+                              None, want_signals=False, quiet=True)
+
+    writer = bus.StreamWriter(factory, quiet=True)
+    writer.start()
+    for ev in es.FIXTURES:
+        market = "spot" if ev.get("e") in ("executionReport", "outboundAccountPosition",
+                                          "balanceUpdate", "listStatus") else "um"
+        writer.write(market, ev)
+    writer.close()
+    assert writer.count == len(es.FIXTURES)
+    assert writer.dropped == 0

@@ -8,7 +8,7 @@
 **官方 API Key 私有实时推送**、**事件落库 + 策略信号**。面向个人量化研究，**只读，不包含交易下单**。
 
 > 当前处于 harness 工程化改造中：分支 `harnessing`，计划见 `docs/exec-plans/active/harness-migration.md`。
-> 阶段 1 已确认；批次 1（并发修复）之前，**不要宣称多市场 + SQLite/PG 落库可用**（TD-RUNTIME-001）。
+> 阶段 1–3 已完成；批次 1（并发/看门狗/签名修复）已完成，多市场 + SQLite/PG 落库可用。
 
 ## 如何开始
 
@@ -29,7 +29,7 @@
 4. **私有数据不进版本库**：`work/`（含 App 配置、Cookie 副本、逆向证据）只保留在本地（D3 决策）。
 5. **请求层纪律**：所有公网请求必须有超时、重试与限频预算；429/418/5xx 一律退避。
 6. **合约 WS 路由**：必须用 `/market`（行情）、`/public`（盘口）、`/private`（用户数据）前缀；旧 `/ws/` 只推 `/public` 数据。
-7. **单写线程**：落库/信号只允许一个写线程持有 DB 连接（批次 1 完成前，多市场写库是已知缺陷）。
+7. **单写线程**：落库/信号只允许 writer 线程持有 DB 连接；监听线程只入队（已实现，`--queue-size` 有界背压）。
 8. **文档与代码同提交**：行为/接口变化必须同步更新对应 `docs/`；计划写在 `docs/exec-plans/active/`，完成后移入 `completed/`。
 
 ## 常用命令
@@ -53,7 +53,7 @@ python3 -m compileall -q tools scripts
 .venv/bin/python -m pytest -q
 python3 scripts/docs/check_docs.py                  # 文档链接/结构/新鲜度检查
 python3 scripts/analysis/scan_project.py --out docs/exec-plans/active/scan
-python3 scripts/analysis/repro_thread_safety.py     # 已知 P0 复现（修复后应退出码 1）
+python3 scripts/analysis/repro_thread_safety.py     # P0 回归反证（退出码 1 = 未复现/已修复）
 ```
 
 ## 目录地图

@@ -16,13 +16,13 @@
 
 | 症状 | 根因 | 动作 |
 |---|---|---|
-| 合约 WS 握手 101 但 0 帧 | 用了旧路径 `/ws/<stream>`，旧路径只推 `/public` 数据（ADR-003） | 行情改 `/market/ws`，盘口改 `/public/ws` |
+| 合约 WS 握手 101 但 0 帧 | 用了旧路径 `/ws/<stream>`，旧路径只推 `/public` 数据（ADR-003）；另一可能是真的无事件 | 行情改 `/market/ws`，盘口改 `/public/ws`；看门狗 180s 无消息会自动重连 |
 | `wss://nbstream.binance.com` 1006/404 | App 内部边缘流（token+gzip），非公开标准流 | 不要用；公开流替代 |
 | `sfstream/sdstream` 302 → `www.binance.com/en` | 同上，App 私有 gzip 通道 | 不要用 |
 | 现货订阅成功但长时间无事件 | 账户无委托/成交（事件驱动） | 下测试单或等待；用 `check` 确认订阅成功 |
 | `listenKeyExpired` 事件 | listenKey 超过 60 分钟 | 脚本自动重建；确认 30 分钟 PUT 续期未被网络中断 |
 | `-1125 This listenKey does not exist` | listenKey 过期/被删 | 重新 POST 创建；不要复用旧 key |
-| 多市场 + `--sink sqlite/pg` 崩溃 | P0：跨线程共享 DB 连接（TD-RUNTIME-001） | **先单市场**（`--markets spot`）；修复在批次 1 |
+| ~~多市场 + `--sink sqlite/pg` 崩溃~~ | 跨线程共享 DB 连接（TD-RUNTIME-001，**批次 1 已修**） | 已改为单写线程；若复现，确认没有绕过 `StreamWriter` |
 | 鉴权失败反复重连 | 脚本熔断阈值 | 连续 2 次 -2014/-2015 会停止该市场；检查 Key 后重跑 |
 
 ## 3. REST / 限频类
@@ -54,7 +54,7 @@
 
 | 症状 | 根因 | 动作 |
 |---|---|---|
-| `ProgrammingError: SQLite objects created in a thread…` | 跨线程共享连接（P0） | 单市场运行；等批次 1 |
+| `ProgrammingError: SQLite objects created in a thread…` | 绕过 `StreamWriter` 直连 DB（批次 1 后不应出现） | 检查调用路径；所有写入必须经 `StreamWriter.write` |
 | PG `ModuleNotFoundError: psycopg` | 用了系统 Python 而非 `.venv` | `.venv/bin/python ...`；或安装 `psycopg[binary]` |
 | PG `password authentication failed` | DSN 错误 | 检查用户名/密码/库名；改用环境变量（TD-SEC-001 待修） |
 | 重复写入导致 orders 重复 | 主键冲突未处理 | 正常行为是 upsert；若重复说明 market/order_id 不一致 |

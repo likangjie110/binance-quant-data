@@ -10,7 +10,7 @@ repro_thread_safety.py —— 复现 `listen --markets spot,um --sink sqlite` �
 
 本脚本只读复现，不修改业务代码：
   python3 scripts/analysis/repro_thread_safety.py
-退出码：0 = 成功复现（存在缺陷）；1 = 未复现（需人工复核）
+退出码：0 = 成功复现（缺陷仍在）；1 = 未复现（已修复/需复核）
 """
 import os
 import sys
@@ -28,9 +28,11 @@ import event_sink as es  # noqa: E402
 def main() -> int:
     tmp = tempfile.mkdtemp(prefix="repro-ts-")
     db = os.path.join(tmp, "binance_stream.db")
-    sinks = es.build_sinks("sqlite", tmp, db, None, want_signals=True, quiet=True)
-    writer = bus.StreamWriter(sinks, quiet=True)
-    writer.start()  # 连接在主线程创建
+    def sink_factory():
+        return es.build_sinks("sqlite", tmp, db, None, want_signals=True, quiet=True)
+
+    writer = bus.StreamWriter(sink_factory, quiet=True)
+    writer.start()  # sink 在 writer 线程创建（批次 1 修复后）
 
     errors = []
 
@@ -52,6 +54,7 @@ def main() -> int:
     writer.close()
 
     print(f"临时目录: {tmp}")
+    print(f"writer: 写入 {writer.count} 条，丢弃 {writer.dropped} 条，失败 {writer.sink_errors} 条")
     if errors:
         print(f"复现成功：{len(errors)} 个线程写入抛错")
         for market, etype, msg, tb in errors:
@@ -59,7 +62,7 @@ def main() -> int:
         print("\n根因：cmd_listen 的多个监听线程共享同一个 SqlSink 连接"
               "（sqlite3 连接默认只能创建线程使用；psycopg 连接同样不支持并发使用）。")
         return 0
-    print("未复现：写入未抛错（请检查 sqlite3 版本/线程模型），仍需人工复核")
+    print("未复现：并发写入无异常（P0 已修复，退出码 1）")
     return 1
 
 

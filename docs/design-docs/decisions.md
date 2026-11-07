@@ -90,3 +90,21 @@
   新增违规会在任何提交上立即失败。
 - **证据**：`scripts/gates/{check.sh,ruff_gate.py,ruff_baseline.txt}`；`.github/workflows/ci.yml`；
   `docs/QUALITY_SCORE.md` 的 ruff 基线指标。
+
+## ADR-010 单写线程 + 有界队列；REST/WS 签名分离
+
+- **日期**：2026-11-07（批次 1）
+- **背景**：P0 缺陷——多市场监听线程共享同一 SQLite/psycopg 连接，第一个事件即抛
+  `ProgrammingError`；信号引擎的持仓/PNL 状态同时被多线程读写。另发现 WS API 签名对非 ASCII
+  参数做了 percent-encode，与官方规则不符（TD-SIGN-001）。
+- **决策**：
+  1. `StreamWriter` 改为**单写线程 + 有界队列**：监听线程只 `write()` 入队；sink（DB 连接）与
+     `SignalEngine` 只在 writer 线程创建/使用；队列满丢弃并计数（`dropped`）。
+  2. 监听循环加静默看门狗（`--idle-timeout`，默认 180s）与可中断退避（`stop_event.wait`），
+     socket 超时 5s 以保证 Ctrl-C 快速退出。
+  3. 签名拆分：`sign_rest` 签 percent-encode 后的 query（REST 实际发送内容）；`sign_ws` 签
+     UTF-8 原值（WS API 规则）；WS 订阅改用 `sign_ws`。
+- **后果**：多市场 + SQLite/PG 落库可用；P0 回归测试（并发写入 6 条事件）转正；
+  ruff 基线清零；Ctrl-C 收敛到 ≤5s；队列满时可能丢弃事件（有计数与告警，不静默丢失语义）。
+- **证据**：`tools/binance_user_stream.py`（`StreamWriter`、`_idle_expired`、`sign_ws`）；
+  `tests/test_p0_threading.py`、`tests/test_signing.py`、`tests/test_listen_logic.py`。

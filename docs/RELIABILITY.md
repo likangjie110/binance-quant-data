@@ -7,11 +7,11 @@
 | 目标 | 当前状态 | 达标条件 |
 |---|---|---|
 | 私有事件不丢 | 未保证 | 落库成功后才继续消费；断线重连按 listenKey 补拉（事件无回放能力，需接受窗口丢失） |
-| 静默流可发现 | 未实现 | 180s 无消息触发重连（TD-REL-001，批次 1） |
+| 静默流可发现 | **已实现**（`--idle-timeout`，默认 180s） | 无消息超时触发重连并打印看门狗日志 |
 | 鉴权错误快速失败 | 已实现 | 连续 2 次 -2014/-2015 停止该市场并给出提示 |
 | 限频不越界 | 已实现（REST） | 读 `X-MBX-USED-WEIGHT-1M`，≥85% 休眠 4s、≥95% 休眠 25s |
 | 写库幂等 | 已实现 | orders upsert、fills 去重、events 追加 |
-| 多市场写库可用 | **不可用（P0）** | 单写线程改造 + 并发回归（TD-RUNTIME-001） |
+| 多市场写库可用 | **已实现**（单写线程 + 有界队列） | 并发回归测试 + 60s 冒烟 |
 
 ## 2. 失败模式与响应
 
@@ -24,7 +24,7 @@
 | `-1022` 签名错误 | secret 错或参数顺序被动 | 响应 | 重新生成 Key；不要手改签名参数 |
 | 429 / 418 | 权重超限 / IP 被封 | 状态码 + `Retry-After` | 429 按 Retry-After（默认 30s）；418 退避 120s |
 | TLS `UNEXPECTED_EOF` / `SSL_ERROR_SYSCALL` | 代理链路抖动 | 异常类型 | 指数退避重试（脚本已内置） |
-| SQLite `ProgrammingError: … same thread` | 跨线程共享连接（P0） | 异常 | **当前无解**；批次 1 修复前不要多市场写 SQLite/PG |
+| ~~SQLite `ProgrammingError: … same thread`~~ | 跨线程共享连接（P0，**已修复**） | 异常计数 | 单写线程后不再出现；若复现检查是否绕过 `StreamWriter` 直连 DB |
 | PG 写入慢/卡 | 每事件 commit（TD-PERF-001） | 写入延迟 | 批量提交（批次 5） |
 | eapi 400 / 空 K 线 | 合约过期 / 无成交 | 响应 | 先取 `optionSymbols` 过滤 `expiryDate`；容忍空数组 |
 
@@ -36,7 +36,8 @@
 | REST 网络/TLS | 同上，重试 3~5 次 | 同上 |
 | 429 | 读 `Retry-After`，缺省 30s | `binance_pull.py` |
 | 418 | 120s | `binance_pull.py` |
-| WS 重连 | 指数退避，上限 30s；listenKey 复用/重建 | `binance_user_stream.py` |
+| WS 重连 | 指数退避，上限 30s；listenKey 复用/重建；`--idle-timeout` 看门狗（默认 180s） | `binance_user_stream.py` |
+| 写队列 | 有界队列（默认 10000），满时丢弃并计数（`dropped`），不阻塞监听 | `StreamWriter` |
 | 鉴权失败 | 不重试，连续 2 次熔断 | `binance_user_stream.py` |
 
 ## 4. 运行手册（Runbook）
@@ -50,7 +51,7 @@
 
 ### 4.2 落库失败
 
-1. SQLite：确认是否多市场并发（P0 已知）→ 先单市场。
+1. SQLite：确认走的仍是 `StreamWriter`（单写线程）；看 `[writer] 写入/丢弃/失败` 统计。
 2. PG：确认 `psycopg` 在运行环境（`.venv/bin/python`），DSN 权限、库是否存在。
 3. 检查磁盘空间与文件权限（`work/private/`、`work/signals/`）。
 
@@ -62,8 +63,8 @@
 
 ## 5. 待补的可靠性能力（批次 1/5）
 
-- [ ] 静默流看门狗（`--idle-timeout`，默认 180s）
-- [ ] 优雅关闭（`threading.Event` + WS/sink 清理，Ctrl-C 5s 内退出）
-- [ ] 单写线程 + 有界队列（背压策略：满队列丢弃并计数，或阻塞监听线程）
-- [ ] 写入批量提交（N 条 / ≤1s）
-- [ ] 结构化日志与指标（事件速率、重连次数、落库失败数）
+- [x] 静默流看门狗（`--idle-timeout`，默认 180s）——批次 1
+- [x] 优雅关闭（`stop_event` + WS/sink 清理；socket 超时 5s）
+- [x] 单写线程 + 有界队列（满队列丢弃并计数 `dropped`）——批次 1
+- [ ] 写入批量提交（N 条 / ≤1s）——批次 5
+- [ ] 结构化日志与指标（事件速率、重连次数、落库失败数）——批次 5

@@ -42,7 +42,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 # ----------------------------------------------------------------------------
 # 常量：各市场主机 / 端点前缀 / K 线单次上限 / 官方权重上限（来自 exchangeInfo）

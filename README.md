@@ -11,8 +11,8 @@
 ## 当前状态
 
 - 正在做 harness 工程化改造：分支 `harnessing`，计划见 [harness-migration](docs/exec-plans/active/harness-migration.md)。
-- 阶段 1（扫描/计划）已确认；阶段 2（文档对齐）进行中；业务代码在阶段 4 前不改动。
-- 已知 P0：多市场 + SQLite/PG 落库存在跨线程写入缺陷（[TD-RUNTIME-001](docs/exec-plans/tech-debt-tracker.md)），批次 1 修复前请单市场运行。
+- 阶段 1–3 已完成；阶段 4 批次 1（运行时可靠性）已完成：单写线程落库、静默流看门狗、REST/WS 签名拆分。
+- 已知 P0 已清零；剩余改造为批次 2（包化）与质量补强（见 [tech-debt-tracker](docs/exec-plans/tech-debt-tracker.md)）。
 
 ## 快速开始
 
@@ -54,7 +54,7 @@ python3 -m venv .venv && .venv/bin/pip install "psycopg[binary]"
 
 - Python ≥ 3.10；核心只依赖标准库。
 - 一键门禁：`bash scripts/gates/check.sh`（CI：`.github/workflows/ci.yml`；文档作业：`docs.yml`）。
-- 已知缺陷复现：`python3 scripts/analysis/repro_thread_safety.py`（修复后应退出码 1）。
+- P0 回归反证：`python3 scripts/analysis/repro_thread_safety.py`（退出码 1 = 未复现/已修复）。
 - 只读扫描：`python3 scripts/analysis/scan_project.py --out /tmp/scan`。
 
 ## 数据与安全

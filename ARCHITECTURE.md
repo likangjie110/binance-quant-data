@@ -40,8 +40,8 @@ scripts/analysis/*、scripts/docs/*  （只依赖标准库，不被运行时代�
    新增依赖必须登记到本文件，否则视为违规（TD-ARCH-002 修复后改为包内相对导入）。
 3. **签名只在一个地方**：目前 `sign_rest()` 在 `binance_user_stream.py:109`；批次 2 收敛到 `client` 模块，
    其他模块不得自行拼签名。
-4. **DB 连接只在 sink 内**：SQLite 连接在 `event_sink.py:321`，PG 连接在 `event_sink.py:336`（lazy 导入）；
-   业务逻辑不得直接开库。
+4. **DB 连接只在 sink 内、且只在 writer 线程**：SQLite 连接在 `event_sink.py:321`，PG 连接在 `event_sink.py:336`（lazy 导入）；
+   监听线程只入队（`StreamWriter.write`），sink 由 writer 线程创建与关闭（批次 1）。
 5. **原始交易所字段只在归一化层解析**：`event_sink.normalize()`（`event_sink.py:90`）是唯一读裸字段的入口；
    sinks/信号只消费归一化结构。
 6. **只读不变量**：全仓库不存在下单/撤单/提币调用；私有 Key 仅用于查询与订阅。
@@ -94,7 +94,8 @@ U 本位: listenKey → /private/ws?listenKey=…                ├→ 事件 J
                                                                     ├→ CSV/JSONL/SQLite/PG
                                                                     └→ SignalEngine → signals_*.jsonl
 ```
-失败模式：listenKey 过期、静默流（0 帧）、TLS 中断、鉴权失败（-2014/-2015/-1022）、多线程写库（**P0**）。
+失败模式：listenKey 过期、静默流（0 帧，看门狗 180s）、TLS 中断、鉴权失败（-2014/-2015/-1022）。
+写入侧由单写线程 + 有界队列隔离（批次 1 修复 P0），队列满丢弃并计数。
 
 ### 4.3 落库（`event_sink.py`）
 
@@ -106,13 +107,13 @@ U 本位: listenKey → /private/ws?listenKey=…                ├→ 事件 J
 |---|---|---|
 | 只读、无交易调用 | 安全与合规风险 | 代码评审 + 后续 CI 关键字扫描 |
 | 核心仅标准库 | 部署/可移植性退化 | `pyproject` 依赖检查 + 评审 |
-| 单写线程持有 DB 连接 | 崩溃/数据竞争（TD-RUNTIME-001/002） | 批次 1 修复 + 并发回归测试 |
+| 单写线程持有 DB 连接 | 崩溃/数据竞争 | `StreamWriter` 线程模型 + 并发回归测试（批次 1 已落地） |
 | 原始字段只在 normalize 解析 | 各处兼容逻辑扩散 | 结构测试（批次 3） |
 | 文档与代码同提交 | 文档腐烂、误导后续 agent | `check_docs.py` + PR 门禁 |
 
 ## 6. 已知架构债（详见 tech-debt-tracker）
 
-- TD-RUNTIME-001/002：跨线程共享 DB 连接与信号状态（P0）
-- TD-ARCH-001/002/003：HTTP 客户端重复、`sys.path` 导入、无包元数据
-- TD-DUP-001/002：两套 fan-out、DDL 双份
-- TD-PERF-001：每事件 commit/print
+- TD-ARCH-001/002/003：HTTP 客户端重复、`sys.path` 导入、无包元数据（批次 2）
+- TD-DUP-001/002：两套 fan-out、DDL 双份（批次 2/5）
+- TD-PERF-001：每事件 commit/print（批次 5）
+- 已修复：TD-RUNTIME-001/002、TD-REL-001/002、TD-SIGN-001、TD-LINT-001（批次 1）

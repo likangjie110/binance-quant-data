@@ -1,12 +1,3 @@
 # ruff 迁移基线（file rule 允许条数）
 # 规则：ruff_gate.py 只允许"不超过基线"的存量违规；新增即失败。
-# 批次 1/2 清理后请删除对应行；文件清空后即零容忍。
-#
-# 关联技术债：
-#   F401 未用导入（2）→ TD-LINT-001
-#   F821 过期注解 JsonlWriter（2）→ TD-LINT-001
-#   F841 last_ping 死变量（1）→ TD-REL-002 / TD-LINT-001
-tools/binance_pull.py F401 1
-tools/binance_user_stream.py F401 1
-tools/binance_user_stream.py F821 2
-tools/binance_user_stream.py F841 1
+# 批次 1（2026-11-07）已清零：本文件保持为空 = 零容忍。

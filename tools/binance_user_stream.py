@@ -52,16 +52,17 @@ import hashlib
 import hmac
 import json
 import os
+import queue
 import random
 import socket
 import ssl
 import struct
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -106,12 +107,23 @@ def mask(s: str, keep: int = 4) -> str:
     return s[:keep] + "*" * (len(s) - keep)
 
 
+def sign_payload(secret: str, payload: str) -> str:
+    """对给定 payload 做 HMAC-SHA256（十六进制）。"""
+    return hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
 def sign_rest(secret: str, params: dict) -> str:
-    """Binance REST/WS API 通用签名：按参数名 ASCII 排序后拼 key=value&...，HMAC-SHA256。"""
+    """REST 签名：参数名 ASCII 排序，值 percent-encode 后拼 key=value&...（与发送的 query 一致）。"""
     payload = "&".join(
         f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in sorted(params.items())
     )
-    return hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return sign_payload(secret, payload)
+
+
+def sign_ws(secret: str, params: dict) -> str:
+    """WS API 签名：参数名排序，值用 UTF-8 原值（官方规则不做 percent-encode）。"""
+    payload = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
+    return sign_payload(secret, payload)
 
 
 def http_json(method: str, base: str, path: str, *, api_key: str | None = None,
@@ -295,49 +307,109 @@ class WSClient:
 # 轮询/输出辅助
 # ---------------------------------------------------------------------------
 class StreamWriter:
-    """把事件同时写给多个 sink（JSONL/CSV/SQLite/PG/信号），并在控制台打印摘要。"""
+    """单写线程事件写入器。
 
-    def __init__(self, sinks: list, quiet: bool = False):
-        self.sinks = sinks
+    监听线程只调用 write() 入队；sink（DB 连接）与信号引擎**只在 writer 线程创建和使用**，
+    从而避开 SQLite/psycopg 的线程亲和性错误与信号状态数据竞争（TD-RUNTIME-001/002）。
+    队列有界：满时丢弃并计数（背压策略见 docs/RELIABILITY.md）。
+    """
+
+    def __init__(self, sink_factory, quiet: bool = False, queue_size: int = 10000):
+        self._sink_factory = sink_factory
         self.quiet = quiet
+        self._queue: queue.Queue = queue.Queue(maxsize=max(1, int(queue_size)))
+        self._stop = threading.Event()
+        self._ready = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._init_error: Exception | None = None
+        self.sinks: list = []
         self.count = 0
+        self.dropped = 0
+        self.sink_errors = 0
 
     def start(self):
-        for s in self.sinks:
-            s.start()
+        self._thread = threading.Thread(target=self._run, name="event-writer", daemon=True)
+        self._thread.start()
+        if not self._ready.wait(timeout=15):
+            raise RuntimeError("writer 线程启动超时")
+        if self._init_error is not None:
+            raise RuntimeError(f"初始化 sink 失败: {self._init_error}")
 
-    def write(self, market: str, event: dict):
-        self.count += 1
-        if not self.quiet:
-            etype = event.get("e") or event.get("type") or "?"
-            sym = event.get("s") or ""
-            extra = ""
-            if etype == "executionReport":
-                extra = (f"{event.get('S','')} {event.get('o','')} {event.get('q','')} "
-                         f"@ {event.get('p','')} status={event.get('X','')}")
-            elif etype == "ORDER_TRADE_UPDATE":
-                o = event.get("o", {})
-                extra = (f"{o.get('S','')} {o.get('o','')} {o.get('q','')} "
-                         f"@ {o.get('p','')} status={o.get('X','')}")
-            elif etype == "ACCOUNT_UPDATE":
-                extra = f"reason={event.get('a',{}).get('m','')}"
-            elif etype == "outboundAccountPosition":
-                extra = f"balances={len(event.get('B',[]))}"
-            elif etype == "balanceUpdate":
-                extra = f"{event.get('a','')} delta={event.get('d','')}"
-            print(f"[{iso_now()}] {market:4s} {etype:24s} {sym:12s} {extra}")
-        if normalize is None:
+    def _run(self):
+        try:
+            self.sinks = self._sink_factory()
+            for s in self.sinks:
+                s.start()
+        except Exception as e:  # noqa: BLE001 - 初始化异常交回 start()
+            self._init_error = e
+            self._ready.set()
             return
-        n = normalize(market, event)
-        for s in self.sinks:
-            s.write(n)
-
-    def close(self):
+        self._ready.set()
+        while True:
+            try:
+                market, event = self._queue.get(timeout=0.2)
+            except queue.Empty:
+                if self._stop.is_set():
+                    break
+                continue
+            try:
+                if not self.quiet:
+                    self._print_event(market, event)
+                if normalize is not None:
+                    n = normalize(market, event)
+                    for s in self.sinks:
+                        s.write(n)
+                self.count += 1
+            except Exception as e:  # noqa: BLE001 - 单条写入失败不打断循环
+                self.sink_errors += 1
+                if self.sink_errors in (1, 10, 100, 1000):
+                    print(f"[writer] 写入失败（累计 {self.sink_errors}）: {e}", file=sys.stderr)
         for s in self.sinks:
             try:
                 s.close()
             except Exception:
                 pass
+
+    def _print_event(self, market: str, event: dict):
+        etype = event.get("e") or event.get("type") or "?"
+        sym = event.get("s") or ""
+        extra = ""
+        if etype == "executionReport":
+            extra = (f"{event.get('S','')} {event.get('o','')} {event.get('q','')} "
+                     f"@ {event.get('p','')} status={event.get('X','')}")
+        elif etype == "ORDER_TRADE_UPDATE":
+            o = event.get("o", {})
+            extra = (f"{o.get('S','')} {o.get('o','')} {o.get('q','')} "
+                     f"@ {o.get('p','')} status={o.get('X','')}")
+        elif etype == "ACCOUNT_UPDATE":
+            extra = f"reason={event.get('a',{}).get('m','')}"
+        elif etype == "outboundAccountPosition":
+            extra = f"balances={len(event.get('B',[]))}"
+        elif etype == "balanceUpdate":
+            extra = f"{event.get('a','')} delta={event.get('d','')}"
+        print(f"[{iso_now()}] {market:4s} {etype:24s} {sym:12s} {extra}")
+
+    def write(self, market: str, event: dict):
+        try:
+            self._queue.put((market, event), timeout=1.0)
+        except queue.Full:
+            self.dropped += 1
+            if self.dropped in (1, 10, 100, 1000):
+                print(f"[writer] 队列已满，丢弃事件（累计 {self.dropped}）；"
+                      "考虑降低订阅量或提高 --queue-size", file=sys.stderr)
+
+    def close(self):
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=30)
+        self.sinks = []
+
+
+def _idle_expired(last_msg: float, idle_timeout: float, now: float | None = None) -> bool:
+    """看门狗：距上次消息是否已超过 idle_timeout（<=0 表示禁用）。"""
+    if idle_timeout <= 0:
+        return False
+    return (now if now is not None else time.time()) - last_msg > idle_timeout
 
 
 def load_credentials(args) -> tuple[str, str]:
@@ -614,23 +686,29 @@ def cmd_snapshot(args) -> int:
 # ---------------------------------------------------------------------------
 # 命令：listen（实时私有推送）
 # ---------------------------------------------------------------------------
-def _spot_listen(args, key: str, sec: str, writer: JsonlWriter, deadline: float, state: dict) -> None:
+def _spot_listen(args, key: str, sec: str, writer: StreamWriter, deadline: float,
+                 state: dict, stop_event: threading.Event) -> None:
+    """现货私有流：WS API 签名订阅；带鉴权熔断、静默看门狗与可中断退避。"""
     backoff = 1.0
     auth_fail = 0
-    while time.time() < deadline:
+    idle = args.idle_timeout
+    while time.time() < deadline and not stop_event.is_set():
+        last_msg = time.time()
         try:
-            ws = WSClient(SPOT_WS_API, timeout=30)
+            ws = WSClient(SPOT_WS_API, timeout=5)
             params = {"apiKey": key, "timestamp": now_ms(), "recvWindow": 5000}
-            params["signature"] = sign_rest(sec, params)
+            params["signature"] = sign_ws(sec, params)
             ws.send_text(json.dumps({"id": "sub-1",
                                      "method": "userDataStream.subscribe.signature",
                                      "params": params}))
             print("[spot] 已发起 userDataStream.subscribe.signature，等待事件…")
-            last_ping = time.time()
-            while time.time() < deadline:
+            while time.time() < deadline and not stop_event.is_set():
                 try:
                     op, data = ws.recv()
                 except socket.timeout:
+                    if _idle_expired(last_msg, idle):
+                        print(f"[spot] 看门狗：{idle:.0f}s 无消息，重连")
+                        break
                     continue
                 if op != 0x1:
                     continue
@@ -650,23 +728,27 @@ def _spot_listen(args, key: str, sec: str, writer: JsonlWriter, deadline: float,
                     continue
                 if "e" in msg:  # 用户事件
                     writer.write("spot", msg)
-                last_ping = time.time()
+                last_msg = time.time()
             ws.close()
-            if time.time() < deadline:
+            if time.time() < deadline and not stop_event.is_set():
                 print("[spot] 连接结束，重连…")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - 网络异常后按退避重连
             print(f"[spot] 连接异常: {e}")
-        time.sleep(min(30, backoff))
+        if stop_event.wait(min(30, backoff)):
+            return
         backoff = min(30, backoff * 1.8)
 
 
 def _futures_listen(market: str, rest: str, ws_base: str, args,
-                    key: str, sec: str, writer: JsonlWriter, deadline: float, state: dict) -> None:
+                    key: str, sec: str, writer: StreamWriter, deadline: float,
+                    state: dict, stop_event: threading.Event) -> None:
+    """合约私有流：listenKey + 私有 WS；带续期、鉴权熔断、看门狗与可中断退避。"""
     listen_key = None
     last_keep = 0.0
     backoff = 1.0
     auth_fail = 0
-    while time.time() < deadline:
+    idle = args.idle_timeout
+    while time.time() < deadline and not stop_event.is_set():
         # 1) 拿 listenKey（每次重连都复用当前有效的 key）
         if not listen_key:
             code, lk = create_listen_key(rest, market, key, sec)
@@ -682,10 +764,12 @@ def _futures_listen(market: str, rest: str, ws_base: str, args,
                         return
                 else:
                     auth_fail = 0
-                time.sleep(min(30, backoff))
+                if stop_event.wait(min(30, backoff)):
+                    return
                 backoff = min(30, backoff * 1.8)
                 continue
         last_keep = time.time()
+        last_msg = time.time()
         # 2) 连接（优先新路由 /private，失败时回落旧式 /ws/<listenKey>）
         try:
             if market == "um":
@@ -700,14 +784,14 @@ def _futures_listen(market: str, rest: str, ws_base: str, args,
             last_exc = None
             for u in urls:
                 try:
-                    ws = WSClient(u, timeout=30)
+                    ws = WSClient(u, timeout=5)
                     break
-                except Exception as e:  # 新路由不可用时尝试旧路由
+                except Exception as e:  # noqa: BLE001 - 新路由不可用时尝试旧路由
                     last_exc = e
             if ws is None:
                 raise last_exc or ConnectionError("no private ws route available")
             print(f"[{market}] 已连接私有流 {mask(listen_key, 6)}")
-            while time.time() < deadline:
+            while time.time() < deadline and not stop_event.is_set():
                 if time.time() - last_keep > KEEPALIVE_FUT_SEC:
                     code = keepalive_listen_key(rest, market, key, sec, listen_key)
                     print(f"[{market}] listenKey keepalive http={code}")
@@ -715,22 +799,26 @@ def _futures_listen(market: str, rest: str, ws_base: str, args,
                 try:
                     op, data = ws.recv()
                 except socket.timeout:
+                    if _idle_expired(last_msg, idle):
+                        print(f"[{market}] 看门狗：{idle:.0f}s 无消息，重连")
+                        break
                     continue
                 if op != 0x1:
                     continue
                 msg = json.loads(data)
-                etype = msg.get("e")
-                if etype == "listenKeyExpired":
+                if msg.get("e") == "listenKeyExpired":
                     print(f"[{market}] listenKey 过期，重新申请")
                     listen_key = None
                     break
                 writer.write(market, msg)
+                last_msg = time.time()
             ws.close()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - 网络异常后按退避重连
             print(f"[{market}] 连接异常: {e}")
-        if time.time() < deadline:
+        if time.time() < deadline and not stop_event.is_set():
             print(f"[{market}] 重连…")
-        time.sleep(min(30, backoff))
+        if stop_event.wait(min(30, backoff)):
+            return
         backoff = min(30, backoff * 1.8)
 
 
@@ -744,42 +832,55 @@ def cmd_listen(args) -> int:
     if build_sinks is None:
         print("无法导入 tools/event_sink.py（请确保它与本脚本同目录）", file=sys.stderr)
         return 1
+
+    def sink_factory():
+        return build_sinks(args.sink, out, args.sqlite, args.pg_dsn,
+                           want_signals=args.signals, quiet=args.quiet)
+
+    # sink（DB 连接）与信号引擎只在 writer 线程创建：避免 SQLite/psycopg 跨线程使用
+    writer = StreamWriter(sink_factory, quiet=args.quiet, queue_size=args.queue_size)
     try:
-        sinks = build_sinks(args.sink, out, args.sqlite, args.pg_dsn,
-                            want_signals=args.signals, quiet=args.quiet)
-    except SystemExit as e:
-        print(str(e), file=sys.stderr)
-        return 1
-    except Exception as e:
+        writer.start()
+    except Exception as e:  # noqa: BLE001 - 初始化失败给出可操作提示
         print(f"初始化 sink 失败: {e}", file=sys.stderr)
         return 1
-    writer = StreamWriter(sinks, quiet=args.quiet)
-    writer.start()
     print(f"监听市场={markets} sinks={args.sink}{'+signals' if args.signals else ''} "
-          f"输出目录={out} 时长={duration or '∞'}s")
+          f"输出目录={out} 时长={duration or '∞'}s 队列={args.queue_size} 看门狗={args.idle_timeout:g}s")
     state: dict = {}
+    stop_event = threading.Event()
     try:
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=len(markets)) as ex:
             futs = []
             for m in markets:
                 if m == "spot":
-                    futs.append(ex.submit(_spot_listen, args, key, sec, writer, deadline, state))
+                    futs.append(ex.submit(_spot_listen, args, key, sec, writer,
+                                          deadline, state, stop_event))
                 elif m == "um":
                     futs.append(ex.submit(_futures_listen, "um", UM_REST, UM_PRIVATE_WS,
-                                          args, key, sec, writer, deadline, state))
+                                          args, key, sec, writer, deadline, state, stop_event))
                 elif m == "cm":
                     futs.append(ex.submit(_futures_listen, "cm", CM_REST, CM_PRIVATE_WS,
-                                          args, key, sec, writer, deadline, state))
+                                          args, key, sec, writer, deadline, state, stop_event))
                 else:
                     print(f"未知市场 {m}", file=sys.stderr)
+                    stop_event.set()
                     return 1
-            for f in futs:
-                f.result()
-    except KeyboardInterrupt:
-        print("\n收到中断，退出")
+            try:
+                for f in futs:
+                    f.result()
+            except KeyboardInterrupt:
+                print("\n收到中断，停止监听…")
+                stop_event.set()
+                for f in futs:
+                    try:
+                        f.result(timeout=10)
+                    except Exception:  # noqa: BLE001 - 收尾阶段忽略超时/取消
+                        pass
     finally:
+        stop_event.set()
         writer.close()
+        print(f"[writer] 写入 {writer.count} 条，丢弃 {writer.dropped} 条，失败 {writer.sink_errors} 条")
     return 1 if state.get("auth_failed") else 0
 
 
@@ -818,6 +919,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--pg-dsn", default=None, help="PostgreSQL DSN，如 postgresql://user:pass@host:5432/db")
     sp.add_argument("--signals", action="store_true", help="同时输出策略信号（JSONL）")
     sp.add_argument("--events", default="", help="UM 私有流事件过滤，如 ORDER_TRADE_UPDATE/ACCOUNT_UPDATE")
+    sp.add_argument("--idle-timeout", type=float, default=180.0,
+                    help="看门狗：多少秒无消息后重连（0=禁用，默认 180）")
+    sp.add_argument("--queue-size", type=int, default=10000,
+                    help="写队列上限；满时丢弃并计数（默认 10000）")
     sp.set_defaults(func=cmd_listen)
     return p
 
