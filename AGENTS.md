@@ -8,7 +8,7 @@
 **官方 API Key 私有实时推送**、**事件落库 + 策略信号**。面向个人量化研究，**只读，不包含交易下单**。
 
 > 当前处于 harness 工程化改造中：分支 `harnessing`，计划见 `docs/exec-plans/active/harness-migration.md`。
-> 阶段 1–3 已完成；批次 1（并发/看门狗/签名修复）已完成，多市场 + SQLite/PG 落库可用。
+> 阶段 1–3 已完成；批次 1（并发/看门狗/签名）与批次 2（包化/共享客户端）已完成。
 
 ## 如何开始
 
@@ -23,7 +23,7 @@
 
 ## 硬性约束（不可违反）
 
-1. **核心零依赖**：`tools/` 只允许 Python 标准库；PostgreSQL 是可选 extras（`psycopg[binary]`），不得变成必需依赖。
+1. **核心零依赖**：`binance_tools/` 与 `tools/` 只允许 Python 标准库；PostgreSQL 是可选 extras（`psycopg[binary]`），不得变成必需依赖。
 2. **只读**：不得实现下单、撤单、划转、提币；私有 Key 仅用于查询与订阅。
 3. **密钥不落盘、不打印**：只从环境变量或 `chmod 600` 文件读取；`work/`、`.env`、`*key*.txt` 已在 `.gitignore`。
 4. **私有数据不进版本库**：`work/`（含 App 配置、Cookie 副本、逆向证据）只保留在本地（D3 决策）。
@@ -35,21 +35,22 @@
 ## 常用命令
 
 ```bash
-# 运行（无需安装）
-python3 tools/binance_pull.py --help
-python3 tools/binance_user_stream.py selftest        # 无密钥自检：签名向量 + 公共 WS
-python3 tools/binance_user_stream.py check           # API Key 权限/私有流校验
-python3 tools/binance_user_stream.py listen --markets spot,um --out work/private --sink jsonl,csv --signals
-python3 tools/event_sink.py selftest --out work/signals/selftest
+# 安装为命令（可选）：pip install -e . → binance-tools
+# 或无需安装：python3 -m binance_tools
+python3 -m binance_tools selftest                    # 无密钥自检：签名向量 + 公共 WS
+python3 -m binance_tools check                       # API Key 权限/私有流校验
+python3 -m binance_tools listen --markets spot,um --out work/private --sink jsonl,csv --signals
+python3 -m binance_tools klines --market spot --symbol BTCUSDT --interval 1h --limit 24
+python3 tools/binance_pull.py --help                 # 旧脚本薄壳仍可用
 
 # PostgreSQL 落库（可选依赖，独立 venv）
 python3 -m venv .venv && .venv/bin/pip install "psycopg[binary]"
-.venv/bin/python tools/event_sink.py selftest --out work/signals/selftest --pg-dsn "$BINANCE_PG_DSN"
+.venv/bin/python -m binance_tools sink-selftest --out work/signals/selftest --pg-dsn "$BINANCE_PG_DSN"
 
 # 质量门禁（一键；CI 跑同一脚本）
 bash scripts/gates/check.sh
 # 单项
-python3 -m compileall -q tools scripts
+python3 -m compileall -q binance_tools tools scripts tests
 .venv/bin/python -m pytest -q
 python3 scripts/docs/check_docs.py                  # 文档链接/结构/新鲜度检查
 python3 scripts/analysis/scan_project.py --out docs/exec-plans/active/scan
@@ -60,7 +61,8 @@ python3 scripts/analysis/repro_thread_safety.py     # P0 回归反证（退出�
 
 | 路径 | 职责 |
 |---|---|
-| `tools/` | 三个 CLI：公开行情拉取、私有实时推送、事件落库/信号（批次 2 将包化） |
+| `binance_tools/` | 包：cli/public/private/client/ws/signing/sinks/signals/normalize（批次 2） |
+| `tools/` | 三个兼容薄壳（旧命令转发到 `binance_tools.cli`） |
 | `sql/` | PostgreSQL 表结构（单一事实源，DDL 代码内副本待合并，TD-DUP-002） |
 | `scripts/analysis/` | 只读扫描器与缺陷复现脚本，不属于运行时代码 |
 | `scripts/docs/` | 文档校验器（链接/结构/新鲜度） |

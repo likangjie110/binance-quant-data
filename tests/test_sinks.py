@@ -2,18 +2,20 @@
 import json
 import sqlite3
 
-import event_sink as es
+from binance_tools import sinks as es
+from binance_tools.fixtures import FIXTURES
+from binance_tools.normalize import normalize
 
 
 def _feed(sinks, markets=None):
     multi = es.MultiSink(sinks)
     multi.start()
     try:
-        for ev in es.FIXTURES:
+        for ev in FIXTURES:
             etype = ev.get("e")
             market = "spot" if etype in ("executionReport", "outboundAccountPosition",
                                          "balanceUpdate", "listStatus") else "um"
-            multi.write(es.normalize(market, ev))
+            multi.write(normalize(market, ev))
     finally:
         multi.close()
 
@@ -32,7 +34,7 @@ def test_sqlite_counts(tmp_path):
     sinks = es.build_sinks("sqlite", str(tmp_path), str(db), None, want_signals=False, quiet=True)
     _feed(sinks)
     counts = _counts(db)
-    assert counts["stream_events"] == len(es.FIXTURES)
+    assert counts["stream_events"] == len(FIXTURES)
     assert counts["orders"] == 3
     assert counts["fills"] == 4
     assert counts["balances"] == 3
@@ -46,7 +48,7 @@ def test_sqlite_idempotent_on_replay(tmp_path):
         sinks = es.build_sinks("sqlite", str(tmp_path), str(db), None, want_signals=False, quiet=True)
         _feed(sinks)
     counts = _counts(db)
-    assert counts["stream_events"] == 2 * len(es.FIXTURES)   # 原始事件追加
+    assert counts["stream_events"] == 2 * len(FIXTURES)   # 原始事件追加
     assert counts["orders"] == 3                             # 订单 upsert
     assert counts["fills"] == 4                              # 成交去重
     assert counts["positions"] == 1
@@ -58,7 +60,7 @@ def test_jsonl_and_csv_outputs(tmp_path):
     jsonl = list(tmp_path.glob("user_stream_*.jsonl"))
     assert len(jsonl) == 1
     rows = [json.loads(line) for line in jsonl[0].read_text(encoding="utf-8").splitlines()]
-    assert len(rows) == len(es.FIXTURES)
+    assert len(rows) == len(FIXTURES)
     assert rows[0]["market"] in ("spot", "um")
 
     csv_dir = tmp_path / "csv"

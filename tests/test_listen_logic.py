@@ -1,5 +1,5 @@
 """监听循环的纯逻辑单测（不碰网络）。"""
-from binance_user_stream import _idle_expired
+from binance_tools.private import _idle_expired
 
 
 def test_idle_expired_boundary():

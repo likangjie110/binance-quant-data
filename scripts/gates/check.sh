@@ -30,10 +30,10 @@ fi
 step() { printf '\n[%s] %s\n' "$1" "$2"; }
 
 step "1/6" "语法编译（compileall）"
-"$PY" -m compileall -q tools scripts tests
+"$PY" -m compileall -q binance_tools tools scripts tests
 
 step "2/6" "ruff（迁移基线：不允许新增违规）"
-"$PY" scripts/gates/ruff_gate.py --ruff "$RUFF"
+"$PY" scripts/gates/ruff_gate.py --ruff "$RUFF" --targets binance_tools tools scripts tests
 
 step "3/6" "pytest"
 "$PY" -m pytest -q

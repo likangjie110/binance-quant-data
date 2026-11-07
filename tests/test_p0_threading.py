@@ -6,8 +6,9 @@
 import sqlite3
 import threading
 
-import event_sink as es
-import binance_user_stream as bus
+from binance_tools import private as bus
+from binance_tools import sinks as es
+from binance_tools.fixtures import FIXTURES
 
 
 def test_multi_market_concurrent_write(tmp_path):
@@ -24,7 +25,7 @@ def test_multi_market_concurrent_write(tmp_path):
 
     def worker(market, event_type):
         try:
-            for ev in es.FIXTURES:
+            for ev in FIXTURES:
                 if ev.get("e") == event_type:
                     writer.write(market, ev)
         except Exception as exc:  # noqa: BLE001 - 记录线程内异常用于断言
@@ -58,10 +59,10 @@ def test_close_drains_queue(tmp_path):
 
     writer = bus.StreamWriter(factory, quiet=True)
     writer.start()
-    for ev in es.FIXTURES:
+    for ev in FIXTURES:
         market = "spot" if ev.get("e") in ("executionReport", "outboundAccountPosition",
                                           "balanceUpdate", "listStatus") else "um"
         writer.write(market, ev)
     writer.close()
-    assert writer.count == len(es.FIXTURES)
+    assert writer.count == len(FIXTURES)
     assert writer.dropped == 0

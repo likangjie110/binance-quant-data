@@ -108,3 +108,17 @@
   ruff 基线清零；Ctrl-C 收敛到 ≤5s；队列满时可能丢弃事件（有计数与告警，不静默丢失语义）。
 - **证据**：`tools/binance_user_stream.py`（`StreamWriter`、`_idle_expired`、`sign_ws`）；
   `tests/test_p0_threading.py`、`tests/test_signing.py`、`tests/test_listen_logic.py`。
+
+## ADR-011 包化：`binance_tools/` + console script，旧脚本保留薄壳
+
+- **日期**：2026-11-07（批次 2，D2）
+- **背景**：三份脚本各自实现 HTTP/重试/签名，`binance_user_stream` 通过 `sys.path` 注入导入
+  `event_sink`；无 `pyproject.toml`、无版本/依赖声明，测试只能靠路径 hack。
+- **决策**：收敛为 `binance_tools/` 包：
+  `config/common/signing/client/ws/normalize/fixtures/sinks/signals/public/private/event_cli/cli`。
+  `pyproject.toml` 提供 `[project]`（name `binance-tools`、version、requires-python>=3.10、
+  extras `pg`/`dev`）与 `console_scripts: binance-tools`。`tools/*.py` 保留为**薄壳**（仅转发），
+  旧命令与参数完全兼容；`python3 -m binance_tools` 作为免安装入口。
+- **后果**：共享客户端/签名/常量成为单一事实源；测试改为包导入；`pip install -e .` 得到 `binance-tools`。
+  代价是迁移期双入口共存，下一版本可删除 `tools/` 薄壳。
+- **证据**：`pyproject.toml`、`binance_tools/cli.py`、`binance_tools/__main__.py`、`ARCHITECTURE.md` §3。

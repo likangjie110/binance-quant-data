@@ -5,7 +5,7 @@
 - 项目 / 仓库：`量化数据源`（`/Users/likangjie/项目代码/量化数据源`）
 - 分支：`harnessing`（基线在 `main`，提交 `07cae02`）
 - 计划版本 / 日期：v1 / 2026-11-06
-- 状态：**执行中**（阶段 1–3 已完成；阶段 4 批次 1 已完成，批次 2 待启动）
+- 状态：**执行中**（阶段 1–3 已完成；阶段 4 批次 1–2 已完成，批次 5 待启动）
 - 规则来源：`docs/HARNESS-RULES.md`（与 `~/references/harness-go` 哈希一致：`5d6820b1…`）
 
 ## 1. 项目概况
@@ -116,7 +116,7 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 | 批次 | 覆盖业务域 | 主要目标 | 依赖前置 | 回滚方案 |
 |---|---|---|---|---|
 | 批次 1 ✅ | 运行时可靠性（`binance_user_stream` + `event_sink` 写入路径） | 修复 P0 并发缺陷；加静默流看门狗与优雅退出；回归测试 | 阶段 3 门禁就位；TD-TEST-001 的最小回归用例 | `git revert` 批次提交即可；无 schema 迁移、无数据变更；回滚后回到“单市场可用、多市场落库不可用”的既有状态 |
-| 批次 2 | 共享客户端与工程结构 | 抽 `binance_client`（REST/签名/重试/限频）；包化 + `pyproject`；消除 `sys.path` hack 与 fan-out 重复 | 批次 1 完成（避免冲突）；D2 决策 | `git revert` 批次提交；保留旧 CLI 参数与输出格式（先对拍后切换），旧脚本可回退 |
+| 批次 2 ✅ | 共享客户端与工程结构 | 抽 `binance_client`（REST/签名/重试/限频）；包化 + `pyproject`；消除 `sys.path` hack 与 fan-out 重复 | 批次 1 完成（避免冲突）；D2 决策 | `git revert` 批次提交；保留旧 CLI 参数与输出格式（先对拍后切换），旧脚本可回退 |
 | 批次 3 | 质量门禁 | pytest 用例集、pre-commit/CI、密钥扫描白名单、依赖锁定 | D1、D5 决策 | 删除新增门禁文件/配置；不改业务逻辑，回滚不影响运行 |
 | 批次 4 | 文档与知识 | 建立 `AGENTS.md`/`ARCHITECTURE.md`/`core-beliefs.md`；收敛规则文档；证据保留策略 | 阶段 2 文档对齐完成 | `git revert` 文档提交；无代码影响 |
 | 批次 5 | 性能与整洁 | 批量提交、日志分级、DDL 单一事实源、复杂度拆分 | 批次 2 完成 | `git revert`；DDL 切换需同时回滚 `sql/` 与代码读取逻辑，回滚前导出备份 |
@@ -205,12 +205,15 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 - [x] ruff 引入（D5）：仅 lint，基线机制避免一次性改业务代码
 - [x] §3.3 Tauri 三问：不适用（非 Tauri），已在 `docs/CI.md` 标注
 
-### 阶段 4 · 问题修复与重构（**批次 1 已完成，2026-11-07**）
+### 阶段 4 · 问题修复与重构（**批次 1–2 已完成，2026-11-07**）
 
 - 前置：阶段 3 通过（护栏就位后才允许动业务代码）。
 - 批次 1 已完成：单写线程 + 有界队列（TD-RUNTIME-001/002）、静默看门狗与可中断退避（TD-REL-001/002）、
   REST/WS 签名拆分（TD-SIGN-001）、ruff 基线清零（TD-LINT-001）；P0 回归测试转正，门禁全绿。
-- 按批次推进（§4）：批次 1 ✅ → 批次 2（包化，待启动）→ 批次 5（性能项在阶段 5 后可选）。
+- 批次 2 已完成：`binance_tools/` 包（cli/public/private/client/ws/signing/sinks/signals/normalize/common/config），
+  `pyproject.toml` + `binance-tools` console script（`pip install -e .` 验证通过），旧脚本改为薄壳；
+  `StreamWriter` 复用 `MultiSink`（fan-out 去重）；旧命令行为对拍通过。
+- 按批次推进（§4）：批次 1 ✅ → 批次 2 ✅ → 批次 5（性能项在阶段 5 后可选）。
 - 每批流程：先补回归测试 → 修复 → 门禁全绿 → 出具“行为对比”证据 → 提交。
 - 验收（每批独立）：`git diff` 只涉及声明范围；门禁通过；P0/P1 项在 tracker 中状态更新；批次 1 需附并发写入 60s 冒烟日志。
 
@@ -246,7 +249,8 @@ sql/binance_stream_schema.sql ──(手工同步)──> event_sink.py::ensure_
 | 2026-11-06 | 阶段 1 | 业务代码零改动自证 | — | `git diff --stat -- tools/ sql/` 为空；本阶段新增仅 `docs/`、`scripts/analysis/`、`.gitignore` 调整 |
 | 2026-11-06 | 决策 | D1–D4 用户拍板（ADR-004/005/006/007） | — | CI=GitHub Actions；包化；work/ 本地保留；落库双写 |
 | 2026-11-07 | 决策 | D5：引入 ruff（仅 lint，不上 mypy） | — | 用户拍板；采用迁移基线，不改业务代码 |
-| 2026-11-07 | 批次 1 | 单写线程/看门狗/签名拆分/ruff 清零；6 个 TD 完成 | 待提交 | 并发回归转正；`repro_thread_safety.py` 退出码 1（未复现） |
+| 2026-11-07 | 批次 1 | 单写线程/看门狗/签名拆分/ruff 清零；6 个 TD 完成 | `477b232` | 并发回归转正；`repro_thread_safety.py` 退出码 1（未复现） |
+| 2026-11-07 | 批次 2 | 包化 + 统一客户端 + pyproject/console script；4 个 TD 完成 | 待提交 | `pip install -e .` 与三种入口冒烟通过；旧命令行为不变 |
 | 2026-11-07 | 阶段 3 | 门禁体系落地：gate 脚本 + pytest + ruff 基线 + 密钥门禁 + 依赖锁定 + CI | 待提交 | 本地 `check.sh` 全绿；GitHub Actions 两个作业已验证 |
 | 2026-11-06 | 阶段 2 | 文档对齐完成：AGENTS/ARCHITECTURE/索引/信念/ADR/规格/质量/可靠/安全/开发/排障/生成物 + 校验器 + CI 作业 | 待提交 | `check_docs.py` 通过；重复规则文档收敛；README 重写并说明 work/ 本地策略 |
 

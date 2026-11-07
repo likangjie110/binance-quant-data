@@ -19,10 +19,11 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(ROOT, "tools"))
+sys.path.insert(0, ROOT)
 
-import binance_user_stream as bus  # noqa: E402
-import event_sink as es  # noqa: E402
+from binance_tools import private as bus  # noqa: E402
+from binance_tools import sinks as es  # noqa: E402
+from binance_tools.fixtures import FIXTURES  # noqa: E402
 
 
 def main() -> int:
@@ -38,7 +39,7 @@ def main() -> int:
 
     def worker(market, etype):
         try:
-            for ev in es.FIXTURES[:4]:
+            for ev in FIXTURES[:4]:
                 if ev.get("e") != etype:
                     continue
                 writer.write(market, ev)

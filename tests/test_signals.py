@@ -1,17 +1,19 @@
 """策略信号引擎：订单状态机、持仓变化、已实现盈亏。"""
 import json
 
-import event_sink as es
+from binance_tools.fixtures import FIXTURES
+from binance_tools.normalize import normalize
+from binance_tools.signals import SignalSink
 
 
 def _signals(tmp_path):
     path = tmp_path / "signals.jsonl"
-    sink = es.SignalSink(str(path), quiet=True)
-    for ev in es.FIXTURES:
+    sink = SignalSink(str(path), quiet=True)
+    for ev in FIXTURES:
         etype = ev.get("e")
         market = "spot" if etype in ("executionReport", "outboundAccountPosition",
                                      "balanceUpdate", "listStatus") else "um"
-        sink.write(es.normalize(market, ev))
+        sink.write(normalize(market, ev))
     sink.close()
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 

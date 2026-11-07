@@ -1,5 +1,5 @@
 """签名算法：对照币安官方测试向量（REST/WS API 通用规则）。"""
-from binance_user_stream import sign_rest, sign_ws
+from binance_tools.signing import sign_rest, sign_ws
 
 SECRET = "NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j"
 API_KEY = "vmPUZE6mv9SD5VNHk4HlWFsOr6aKE2zvsw0MuIgwCIPy6utIco14y7Ju91duEh8A"

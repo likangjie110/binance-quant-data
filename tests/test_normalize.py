@@ -1,15 +1,16 @@
 """事件归一化：三类市场异构字段 → 统一结构。"""
-import event_sink as es
+from binance_tools.fixtures import FIXTURES
+from binance_tools.normalize import normalize
 
 
 def _fixture(event_type):
-    return next(e for e in es.FIXTURES if e.get("e") == event_type)
+    return next(e for e in FIXTURES if e.get("e") == event_type)
 
 
 def test_spot_execution_report_trade():
-    ev = next(e for e in es.FIXTURES
+    ev = next(e for e in FIXTURES
               if e.get("e") == "executionReport" and e.get("x") == "TRADE" and e.get("t") == 9001)
-    n = es.normalize("spot", ev)
+    n = normalize("spot", ev)
     assert n["market"] == "spot"
     assert n["event_type"] == "executionReport"
     assert n["symbol"] == "BTCUSDT"
@@ -24,9 +25,9 @@ def test_spot_execution_report_trade():
 
 
 def test_futures_order_trade_update():
-    ev = next(e for e in es.FIXTURES
+    ev = next(e for e in FIXTURES
               if e.get("e") == "ORDER_TRADE_UPDATE" and e["o"].get("X") == "FILLED")
-    n = es.normalize("um", ev)
+    n = normalize("um", ev)
     assert n["symbol"] == "ETHUSDT"
     assert n["order"]["avg_price"] == "2500.0"
     assert n["order"]["realized_pnl"] == "0"
@@ -35,8 +36,8 @@ def test_futures_order_trade_update():
 
 
 def test_account_update_positions_and_balances():
-    ev = next(e for e in es.FIXTURES if e.get("e") == "ACCOUNT_UPDATE")
-    n = es.normalize("um", ev)
+    ev = next(e for e in FIXTURES if e.get("e") == "ACCOUNT_UPDATE")
+    n = normalize("um", ev)
     assert n["reason"] == "ORDER"
     assert n["balances"][0]["asset"] == "USDT"
     assert n["balances"][0]["free"] == "4999.95"
@@ -46,7 +47,7 @@ def test_account_update_positions_and_balances():
 
 def test_outbound_account_position():
     ev = _fixture("outboundAccountPosition")
-    n = es.normalize("spot", ev)
+    n = normalize("spot", ev)
     assets = {b["asset"]: b for b in n["balances"]}
     assert assets["BTC"]["free"] == "0.00400000"
     assert assets["USDT"]["free"] == "699.99"
@@ -54,13 +55,13 @@ def test_outbound_account_position():
 
 def test_balance_update():
     ev = _fixture("balanceUpdate")
-    n = es.normalize("spot", ev)
+    n = normalize("spot", ev)
     assert n["asset"] == "USDT"
     assert n["delta"] == "-750.00"
 
 
 def test_unknown_event_is_safe():
-    n = es.normalize("spot", {"e": "somethingNew", "E": 1})
+    n = normalize("spot", {"e": "somethingNew", "E": 1})
     assert n["event_type"] == "somethingNew"
     assert n["order"] is None
     assert n["fills"] == []

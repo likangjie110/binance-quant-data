@@ -11,25 +11,30 @@
 ## 当前状态
 
 - 正在做 harness 工程化改造：分支 `harnessing`，计划见 [harness-migration](docs/exec-plans/active/harness-migration.md)。
-- 阶段 1–3 已完成；阶段 4 批次 1（运行时可靠性）已完成：单写线程落库、静默流看门狗、REST/WS 签名拆分。
-- 已知 P0 已清零；剩余改造为批次 2（包化）与质量补强（见 [tech-debt-tracker](docs/exec-plans/tech-debt-tracker.md)）。
+- 阶段 1–3、阶段 4 批次 1–2 已完成：单写线程、看门狗、签名拆分、包化（`binance_tools/` + `binance-tools`）。
+- 已知 P0 已清零；剩余为性能/整洁项（批次 5）与阶段 5 测试补全（见 [tech-debt-tracker](docs/exec-plans/tech-debt-tracker.md)）。
 
 ## 快速开始
 
 ```bash
+# 可选安装（得到 binance-tools 命令）；不装则用 python3 -m binance_tools
+pip install -e .
+
 # 无密钥自检（签名向量 + 公共 WS）
-python3 tools/binance_user_stream.py selftest
+binance-tools selftest
 
 # 公开行情：现货 K 线
-python3 tools/binance_pull.py klines --market spot --symbol BTCUSDT --interval 1h --limit 24
+binance-tools klines --market spot --symbol BTCUSDT --interval 1h --limit 24
 
 # 私有推送（需要 BINANCE_API_KEY / BINANCE_API_SECRET，或在 --key-file 指定）
-python3 tools/binance_user_stream.py check
-python3 tools/binance_user_stream.py listen --markets spot --sink jsonl,csv --signals --out work/private
+binance-tools check
+binance-tools listen --markets spot --sink jsonl,csv --signals --out work/private
 
 # 事件落库自检（无需密钥）
-python3 tools/event_sink.py selftest --out work/signals/selftest
+binance-tools sink-selftest --out work/signals/selftest
 ```
+
+> 旧脚本入口 `python3 tools/binance_pull.py ...` 仍然可用（薄壳转发）。
 
 PostgreSQL 落库（可选依赖，独立 venv）：
 
@@ -52,7 +57,7 @@ python3 -m venv .venv && .venv/bin/pip install "psycopg[binary]"
 
 ## 环境与自检
 
-- Python ≥ 3.10；核心只依赖标准库。
+- Python ≥ 3.10；核心只依赖标准库；`pip install -e .` 提供 `binance-tools` 命令。
 - 一键门禁：`bash scripts/gates/check.sh`（CI：`.github/workflows/ci.yml`；文档作业：`docs.yml`）。
 - P0 回归反证：`python3 scripts/analysis/repro_thread_safety.py`（退出码 1 = 未复现/已修复）。
 - 只读扫描：`python3 scripts/analysis/scan_project.py --out /tmp/scan`。

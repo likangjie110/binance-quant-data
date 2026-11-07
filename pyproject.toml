@@ -1,4 +1,23 @@
-# 工程配置（仅工具链；包元数据在批次 2 的 D2 决策中补齐）
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "binance-tools"
+version = "0.2.0"
+description = "币安公开行情 / 私有实时推送 / 事件落库与策略信号（只读）"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+pg = ["psycopg[binary]==3.3.8"]
+dev = ["pytest==9.2.0", "ruff==0.17.4"]
+
+[project.scripts]
+binance-tools = "binance_tools.cli:main"
+
+[tool.setuptools]
+packages = ["binance_tools"]
 
 [tool.ruff]
 line-length = 120

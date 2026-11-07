@@ -19,27 +19,28 @@ python3 -m venv .venv
 
 ## 2. 目录与入口
 
-- 代码：`tools/`（三个 CLI）、`scripts/analysis/`（分析/复现）、`scripts/docs/`（文档校验）
+- 代码包：`binance_tools/`（cli/public/private/client/ws/signing/sinks/signals/normalize/common/config）
+- 兼容薄壳：`tools/*.py`（转发到 `binance_tools.cli`，旧命令保持不变）
+- 脚本：`scripts/analysis/`（分析/复现）、`scripts/docs/`（文档校验）、`scripts/gates/`（门禁）
 - 知识库：`AGENTS.md`、`ARCHITECTURE.md`、`docs/`（索引 `docs/index.md`）
 - 数据：`sql/`（PG DDL）；运行产物 `work/`（**不入库**）
 
-运行方式（无需安装）：
+三种运行方式（行为一致）：
 
 ```bash
-python3 tools/binance_pull.py klines --market spot --symbol BTCUSDT --interval 1h --limit 24
-python3 tools/binance_user_stream.py selftest
-python3 tools/binance_user_stream.py listen --markets spot,um --sink jsonl,csv --signals --out work/private
-python3 tools/event_sink.py selftest --out work/signals/selftest
-```
+pip install -e .                       # 方式 1：安装后使用 binance-tools
+binance-tools klines --market spot --symbol BTCUSDT --interval 1h --limit 24
 
-> 批次 2 包化后入口变为 `python3 -m binance_tools ...` 或 `binance-tools ...`；`tools/*.py` 保留薄壳兼容。
+python3 -m binance_tools selftest       # 方式 2：无需安装（仓库根执行）
+python3 tools/binance_user_stream.py selftest   # 方式 3：旧脚本薄壳
+```
 
 ## 3. 测试与门禁
 
 | 阶段 | 测试方式 |
 |---|---|
 | 一键门禁 | `bash scripts/gates/check.sh`（compileall → ruff 基线 → pytest → 文档 → 生成物 → 密钥） |
-| 单测 | `.venv/bin/python -m pytest -q`（20 用例：签名官方向量、归一化、sink 幂等、信号状态机、CLI 冒烟、P0 xfail） |
+| 单测 | `.venv/bin/python -m pytest -q`（24 用例：签名双向量、归一化、sink 幂等、信号状态机、并发回归、看门狗、CLI 冒烟） |
 | lint | `.venv/bin/ruff check tools scripts tests`；门禁走 `scripts/gates/ruff_gate.py`（迁移基线只拦新增） |
 | P0 回归 | `python3 scripts/analysis/repro_thread_safety.py`：修复前退出码 0（复现），修复后 1（不再复现） |
 
@@ -75,8 +76,8 @@ python3 tools/binance_user_stream.py listen --markets spot --duration 60 --sink 
 
 本项目无构建产物、无发布流水线：
 
-- 使用方式：直接运行脚本（或 `pip install -e .` 后在 PATH 使用 `binance-tools`，批次 2 后）。
-- 版本标识：目前无版本号；包化后在 `pyproject.toml` 声明 `version`，并以 git tag 标记。
+- 使用方式：`pip install -e .` 后使用 `binance-tools`，或 `python3 -m binance_tools`，或旧脚本薄壳。
+- 版本标识：`pyproject.toml` 的 `version`（当前 0.2.0）；发布时以 git tag 标记。
 - CI 只做质量门禁，不产出发布资产。
 
 ## 7. 文档工作流

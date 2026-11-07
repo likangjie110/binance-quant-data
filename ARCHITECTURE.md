@@ -13,67 +13,57 @@
 | 事件处理 | 事件归一化、落库、策略信号 | `tools/event_sink.py` | 6 张表 + `signals_*.jsonl` |
 | 工程治理 | 扫描、文档校验、改造计划 | `scripts/`、`docs/` | 计划/台账/质量评分 |
 
-## 2. 当前代码结构与依赖方向
+## 2. 当前代码结构与依赖方向（批次 2 包化后）
 
 ```
-tools/binance_pull.py        （独立，仅标准库）
-        │  urllib / ssl / csv
-        ▼
-   Binance 公共 REST（api/fapi/dapi/eapi）
-
-tools/binance_user_stream.py （CLI + WS 客户端 + REST 私有调用）
-        │  sys.path 注入后 import
-        ▼
-tools/event_sink.py          （归一化 + sinks + 信号引擎）
-        │                         │
-        │ sqlite3（标准库）        └─► 可选 psycopg（PG，lazy import）
-        ▼
-   SQLite / PostgreSQL
-
-scripts/analysis/*、scripts/docs/*  （只依赖标准库，不被运行时代码依赖）
+binance_tools/
+├── cli.py        统一入口：按子命令分发；console_scripts: binance-tools
+├── public.py     公开行情：klines / ticker24h / depth / exchangeinfo / symbols
+├── private.py    私有推送：selftest / check / snapshot / listen（含 StreamWriter 单写线程）
+├── event_cli.py  落库/信号 CLI：selftest / replay
+├── client.py     BinanceClient（公开 GET：限频/退避/权重）+ http_json（私有签名请求）
+├── ws.py         最小 RFC6455 客户端
+├── signing.py    sign_payload / sign_rest / sign_ws
+├── config.py     主机 / 端点 / UA / 限频常量（唯一事实源）
+├── common.py     时间 / 掩码 / 数值 / 日志
+├── normalize.py  事件归一化（唯一读裸交易所字段处）
+├── fixtures.py   演示样例事件（selftest 与单测共享）
+├── sinks.py      JSONL / CSV / SQLite / PG + build_sinks
+├── signals.py    SignalEngine + SignalSink
+└── __main__.py   支持 python3 -m binance_tools
+tools/*.py        三个兼容薄壳（旧命令仍可用，仅转发到 binance_tools.cli）
 ```
 
 ### 依赖方向规则（可机械核对）
 
-1. **单向**：CLI → 处理层 → 适配器（HTTP/WS/DB）→ 标准库；反向依赖一律禁止。
-2. **只有处理层能跨脚本复用**：目前唯一合法跨脚本依赖是 `binance_user_stream → event_sink`；
-   新增依赖必须登记到本文件，否则视为违规（TD-ARCH-002 修复后改为包内相对导入）。
-3. **签名只在一个地方**：目前 `sign_rest()` 在 `binance_user_stream.py:109`；批次 2 收敛到 `client` 模块，
-   其他模块不得自行拼签名。
-4. **DB 连接只在 sink 内、且只在 writer 线程**：SQLite 连接在 `event_sink.py:321`，PG 连接在 `event_sink.py:336`（lazy 导入）；
-   监听线程只入队（`StreamWriter.write`），sink 由 writer 线程创建与关闭（批次 1）。
-5. **原始交易所字段只在归一化层解析**：`event_sink.normalize()`（`event_sink.py:90`）是唯一读裸字段的入口；
-   sinks/信号只消费归一化结构。
+1. **单向**：`cli → public/private/event_cli → client/ws/sinks/signals/normalize → common/config/stdlib`；反向禁止。
+2. **禁止跨 CLI 模块导入**：`public.py` 不得 import `private.py`，反之亦然；共享能力只能落到
+   `client / ws / signing / sinks / normalize / common / config`。
+3. **签名只在 `signing.py`**：REST 与 WS API 分别用 `sign_rest` / `sign_ws`，其他模块不得自行拼签名。
+4. **DB 连接只在 `sinks.py`，且只在 writer 线程**：`SqliteBackend.connect` / `PgBackend.connect`（lazy 导入 psycopg）；
+   监听线程只入队（`private.StreamWriter.write`）。
+5. **原始交易所字段只在 `normalize.py` 解析**；sinks/信号只消费归一化结构。
 6. **只读不变量**：全仓库不存在下单/撤单/提币调用；私有 Key 仅用于查询与订阅。
 
-### 与代码的抽样核对（阶段 2 验收）
+### 与代码的抽样核对（阶段 2/批次 2 验收）
 
 | 规则 | 代码证据 | 结论 |
 |---|---|---|
-| 跨脚本依赖唯一 | `tools/binance_user_stream.py:67`（`sys.path.insert` + `from event_sink import ...`） | 一致 |
-| 可选依赖边界清晰 | `tools/event_sink.py:326` `PgBackend`；`:336` 内 `import psycopg`（lazy） | 一致 |
-| 公开拉取不依赖内部模块 | `tools/binance_pull.py:32-45` 仅标准库；`:160` 自带 HTTP 客户端 | 一致（同时暴露重复问题 TD-ARCH-001） |
-| DB 只在 sink | `tools/event_sink.py:321`（SQLite）、`:336`（PG）、`:348` `SqlSink` | 一致 |
+| 跨命令复用走共享模块 | `binance_tools/private.py:61-72`（导入 client/common/config/normalize/signing/sinks/ws） | 一致 |
+| 可选依赖边界清晰 | `binance_tools/sinks.py:199` `PgBackend`；`:211` 内 `import psycopg`（lazy） | 一致 |
+| 公开拉取依赖统一客户端 | `binance_tools/public.py:39-41`（导入 client/config/common，无 urllib 直连） | 一致 |
+| DB 只在 sink | `binance_tools/sinks.py:135`（SQLite）、`:199`（PG）、`:221` `SqlSink` | 一致 |
+| 旧入口仅为薄壳 | `tools/binance_pull.py` / `binance_user_stream.py` / `event_sink.py` 只 `from binance_tools.cli import ...` | 一致 |
 
-## 3. 目标结构（批次 2 / D2 包化后）
+## 3. 入口与兼容策略
 
-```
-binance_tools/
-├── __init__.py
-├── config.py      # 主机、路径、端点常量（唯一事实源）
-├── client.py      # REST：签名、超时、重试、限频预算
-├── ws.py          # 最小 RFC6455 客户端（现 binance_user_stream 内置）
-├── public.py      # 公开行情（现 binance_pull 主体）
-├── private.py     # 私有订阅（现 binance_user_stream 主体）
-├── sinks.py       # JSONL/CSV/SQLite/PG（现 event_sink 的 sink 部分）
-├── signals.py     # SignalEngine（现 event_sink）
-├── normalize.py   # 事件归一化
-└── cli.py         # argparse 分发（klines|listen|snapshot|selftest|replay）
-pyproject.toml     # requires-python>=3.10；extras: pg / dev；console_scripts: binance-tools
-tests/             # pytest：签名向量、归一化、sink 幂等、信号状态机、并发回归
-```
+| 方式 | 命令 | 说明 |
+|---|---|---|
+| 统一入口（安装后） | `binance-tools <命令>` | `pip install -e .` 提供 console_scripts（批次 2） |
+| 无需安装 | `python3 -m binance_tools <命令>` | 仓库根目录直接运行 |
+| 旧脚本兼容 | `python3 tools/binance_pull.py ...` 等 | 薄壳转发，参数/输出保持不变；下一版本可移除 |
 
-迁移期保留 `tools/*.py` 薄壳（`from binance_tools.cli import main`），保证旧命令不变。
+统一命令集：`klines | ticker24h | depth | exchangeinfo | symbols | selftest | check | snapshot | listen | replay | sink-selftest`。
 
 ## 4. 关键数据流
 
